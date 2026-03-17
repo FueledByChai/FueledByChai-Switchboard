@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: fueledbychai-dashboard
+  thymeleaf:
+    cache: false
+
+server:
+  shutdown: graceful
+
+dashboard:
+  broadcast-interval-ms: 100
+  history-minutes: 10
+  max-rows: 50
+  proxy:
+    enabled: true
+    host: "localhost"
+    port: 1080
