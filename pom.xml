@@ -95,6 +95,32 @@
             <artifactId>binance-market-data-impl</artifactId>
             <version>${fueledbychai.version}</version>
         </dependency>
+        <dependency>
+            <groupId>com.fueledbychai</groupId>
+            <artifactId>binance-futures-market-data-impl</artifactId>
+            <version>${fueledbychai.version}</version>
+        </dependency>        
+        <dependency>
+            <groupId>com.fueledbychai</groupId>
+            <artifactId>aster-market-data-impl</artifactId>
+            <version>${fueledbychai.version}</version>
+        </dependency>    
+        
+                <dependency>
+            <groupId>com.fueledbychai</groupId>
+            <artifactId>bybit-market-data-impl</artifactId>
+            <version>${fueledbychai.version}</version>
+        </dependency>       
+                <dependency>
+            <groupId>com.fueledbychai</groupId>
+            <artifactId>deribit-market-data-impl</artifactId>
+            <version>${fueledbychai.version}</version>
+        </dependency>             
+                <dependency>
+            <groupId>com.fueledbychai</groupId>
+            <artifactId>okx-market-data-impl</artifactId>
+            <version>${fueledbychai.version}</version>
+        </dependency>                             
 
         <dependency>
             <groupId>org.springframework.boot</groupId>

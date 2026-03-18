@@ -15,7 +15,9 @@
         ws: null,
         reconnectTimer: null,
         toastTimer: null,
-        instrumentPicker: defaultInstrumentPicker()
+        marketLayoutSignature: "",
+        instrumentPicker: defaultInstrumentPicker(),
+        catalogData: null
     };
 
     const dom = {
@@ -56,7 +58,17 @@
         instrumentDialogRows: document.getElementById("instrumentDialogRows"),
         closeInstrumentDialogButton: document.getElementById("closeInstrumentDialogButton"),
         cancelInstrumentButton: document.getElementById("cancelInstrumentButton"),
-        confirmInstrumentButton: document.getElementById("confirmInstrumentButton")
+        confirmInstrumentButton: document.getElementById("confirmInstrumentButton"),
+        openCatalogBtn: document.getElementById("openCatalogBtn"),
+        catalogDialog: document.getElementById("catalogDialog"),
+        catalogDialogPanel: document.getElementById("catalogDialogPanel"),
+        closeCatalogDialogButton: document.getElementById("closeCatalogDialogButton"),
+        catalogCloseButton: document.getElementById("catalogCloseButton"),
+        catalogDialogRows: document.getElementById("catalogDialogRows"),
+        catalogTableHead: document.getElementById("catalogTableHead"),
+        catalogDrilldownHead: document.getElementById("catalogDrilldownHead"),
+        catalogDrilldownTitle: document.getElementById("catalogDrilldownTitle"),
+        backFromDrilldownBtn: document.getElementById("backFromDrilldownBtn")
     };
 
     init();
@@ -101,7 +113,9 @@
             rowIndex: null,
             query: "",
             candidates: [],
-            selectedIndex: -1,
+            selectedKeys: new Set(),
+            focusedIndex: null,
+            anchorIndex: null,
             loading: false,
             submitting: false,
             error: ""
@@ -120,6 +134,12 @@
         dom.confirmInstrumentButton.addEventListener("click", confirmInstrumentSelection);
         dom.instrumentDialogRows.addEventListener("click", onInstrumentPickerRowClick);
         dom.instrumentDialogRows.addEventListener("dblclick", onInstrumentPickerRowDoubleClick);
+        dom.openCatalogBtn.addEventListener("click", openCatalogDialog);
+        dom.closeCatalogDialogButton.addEventListener("click", closeCatalogDialog);
+        dom.catalogCloseButton.addEventListener("click", closeCatalogDialog);
+        dom.catalogDialog.addEventListener("click", onCatalogDialogClick);
+        dom.catalogDialogRows.addEventListener("click", onCatalogRowClick);
+        dom.backFromDrilldownBtn.addEventListener("click", closeCatalogDrilldown);
         document.addEventListener("keydown", onDocumentKeyDown);
 
         dom.sideButtons.forEach(button => {
@@ -165,6 +185,8 @@
         populateSelect(dom.timeInForceSelect, state.metadata.timeInForce || [], dom.timeInForceSelect.value || "GTC");
         dom.orderModePill.textContent = `${formatEnumLabel(state.metadata.orderMode || "PAPER")} Gateway`;
         dom.ticketMode.textContent = formatEnumLabel(state.metadata.orderMode || "PAPER");
+        const exchangeCount = (state.metadata.exchanges || []).length;
+        dom.openCatalogBtn.textContent = `${exchangeCount} Exchange${exchangeCount !== 1 ? "s" : ""}`;
         syncSideButtons();
         toggleLimitField();
     }
@@ -341,7 +363,7 @@
         }
         state.serverTime = payload?.serverTime || state.serverTime;
         syncSelectedMarket();
-        renderAll();
+        renderLiveState();
     }
 
     function syncSelectedMarket(forceLimitRefresh) {
@@ -375,11 +397,15 @@
     }
 
     function renderAll() {
+        renderLiveState();
+        renderInstrumentDialog();
+    }
+
+    function renderLiveState() {
         renderSummary();
         renderMarkets();
         renderTicket();
         renderOrders();
-        renderInstrumentDialog();
     }
 
     function renderSummary() {
@@ -393,16 +419,21 @@
     }
 
     function renderMarkets() {
-        const focusState = captureDraftFocus();
         const slotMap = buildMarketSlotMap();
         const visibleRows = visibleWatchlistRowCount(slotMap);
+        const layoutSignature = buildMarketLayoutSignature(slotMap, visibleRows);
 
-        dom.marketRows.innerHTML = Array.from({length: visibleRows}, (_, rowIndex) => {
-            const market = slotMap.get(rowIndex);
-            return market ? renderActiveMarketRow(market, rowIndex) : renderDraftRow(rowIndex);
-        }).join("");
+        if (state.marketLayoutSignature !== layoutSignature) {
+            const focusState = captureDraftFocus();
+            dom.marketRows.innerHTML = Array.from({length: visibleRows}, (_, rowIndex) => {
+                const market = slotMap.get(rowIndex);
+                return market ? renderActiveMarketRow(market, rowIndex) : renderDraftRow(rowIndex);
+            }).join("");
+            state.marketLayoutSignature = layoutSignature;
+            restoreDraftFocus(focusState);
+        }
 
-        restoreDraftFocus(focusState);
+        updateRenderedMarketRows(slotMap);
     }
 
     function buildMarketSlotMap() {
@@ -438,27 +469,71 @@
         return Math.min(configuredMaxRows(), Math.max(MIN_WATCHLIST_ROWS, highestUsedRow + 2));
     }
 
+    function buildMarketLayoutSignature(slotMap, visibleRows) {
+        const signature = [String(visibleRows)];
+        for (let rowIndex = 0; rowIndex < visibleRows; rowIndex += 1) {
+            const market = slotMap.get(rowIndex);
+            signature.push(`${rowIndex}:${market ? market.id : "draft"}`);
+        }
+        return signature.join("|");
+    }
+
+    function updateRenderedMarketRows(slotMap) {
+        const rows = Array.from(dom.marketRows.querySelectorAll("tr[data-row-index]"));
+        rows.forEach(row => {
+            const rowIndex = parseInteger(row.dataset.rowIndex);
+            const market = slotMap.get(rowIndex);
+            if (!market) {
+                return;
+            }
+
+            row.classList.toggle("selected", market.id === state.selectedMarketId);
+            row.dataset.marketId = market.id;
+
+            setRowFieldText(row, "symbolPrimary", market.symbol || "--");
+            setRowFieldText(row, "asset", formatEnumLabel(market.assetType));
+            setRowFieldText(row, "route", formatEnumLabel(market.exchange));
+            setRowFieldHtml(row, "bid", renderQuoteValue(market.id, "bid", market.bid));
+            setRowFieldHtml(row, "ask", renderQuoteValue(market.id, "ask", market.ask));
+            setRowFieldText(row, "spread", formatNumber(computeSpread(market.bid, market.ask), 1));
+            setRowFieldHtml(row, "last", renderQuoteValue(market.id, "last", market.last));
+            setRowFieldText(row, "volume", formatCompactNumber(market.volume));
+            setRowFieldText(row, "funding", formatNumber(market.fundingRateApr, 2));
+        });
+    }
+
+    function setRowFieldText(row, field, value) {
+        const element = row.querySelector(`[data-market-field="${field}"]`);
+        if (element && element.textContent !== value) {
+            element.textContent = value;
+        }
+    }
+
+    function setRowFieldHtml(row, field, value) {
+        const element = row.querySelector(`[data-market-field="${field}"]`);
+        if (element && element.innerHTML !== value) {
+            element.innerHTML = value;
+        }
+    }
+
     function renderActiveMarketRow(market, rowIndex) {
         const spread = computeSpread(market.bid, market.ask);
         const isSelected = market.id === state.selectedMarketId;
         return `
             <tr data-market-id="${escapeAttribute(market.id)}" data-row-index="${rowIndex}" class="${isSelected ? "selected" : ""}">
-                <td class="row-index-cell">${rowIndex + 1}</td>
                 <td>
                     <div class="symbol-cell">
-                        <strong>${escapeHtml(market.symbol || "--")}</strong>
-                        <span>${escapeHtml(market.exchangeSymbol || "--")}</span>
+                        <strong data-market-field="symbolPrimary">${escapeHtml(market.symbol || "--")}</strong>
                     </div>
                 </td>
-                <td>${escapeHtml(formatEnumLabel(market.assetType))}</td>
-                <td>${escapeHtml(formatEnumLabel(market.exchange))}</td>
-                <td class="number-cell">${renderQuoteValue(market.id, "bid", market.bid)}</td>
-                <td class="number-cell">${renderQuoteValue(market.id, "ask", market.ask)}</td>
-                <td class="number-cell">${formatSignedNumber(spread, 6)}</td>
-                <td class="number-cell">${renderQuoteValue(market.id, "last", market.last)}</td>
-                <td class="number-cell">${formatCompactNumber(market.volume)}</td>
-                <td class="number-cell">${formatNumber(market.fundingRateApr, 2)}</td>
-                <td>${formatAge(market.updatedAt)}</td>
+                <td data-market-field="asset">${escapeHtml(formatEnumLabel(market.assetType))}</td>
+                <td data-market-field="route">${escapeHtml(formatEnumLabel(market.exchange))}</td>
+                <td class="number-cell" data-market-field="bid">${renderQuoteValue(market.id, "bid", market.bid)}</td>
+                <td class="number-cell" data-market-field="ask">${renderQuoteValue(market.id, "ask", market.ask)}</td>
+                <td class="number-cell" data-market-field="spread">${formatNumber(spread, 1)}</td>
+                <td class="number-cell" data-market-field="last">${renderQuoteValue(market.id, "last", market.last)}</td>
+                <td class="number-cell" data-market-field="volume">${formatCompactNumber(market.volume)}</td>
+                <td class="number-cell" data-market-field="funding">${formatNumber(market.fundingRateApr, 2)}</td>
                 <td>
                     <div class="action-cluster compact-actions">
                         <button type="button" class="ticket-btn buy" data-action="buy" data-market-id="${escapeAttribute(market.id)}">Buy</button>
@@ -475,7 +550,6 @@
         const prompt = draftValue ? "Press Return" : rowIndex === 0 ? "Type BTC and press Return" : "";
         return `
             <tr data-row-index="${rowIndex}" class="draft-row">
-                <td class="row-index-cell">${rowIndex + 1}</td>
                 <td class="draft-input-cell">
                     <input
                         type="text"
@@ -495,8 +569,7 @@
                 <td class="placeholder-cell">--</td>
                 <td class="placeholder-cell">--</td>
                 <td class="placeholder-cell">--</td>
-                <td class="placeholder-cell">${draftValue ? "Return" : ""}</td>
-                <td class="placeholder-cell row-hint-cell">${draftValue ? "Resolve" : ""}</td>
+                <td class="placeholder-cell row-hint-cell">${draftValue ? "Return to resolve" : ""}</td>
             </tr>
         `;
     }
@@ -698,7 +771,9 @@
             rowIndex,
             query,
             candidates: [],
-            selectedIndex: -1,
+            selectedKeys: new Set(),
+            focusedIndex: null,
+            anchorIndex: null,
             loading: true,
             submitting: false,
             error: ""
@@ -708,7 +783,6 @@
         try {
             const candidates = await api(`/api/instruments?symbol=${encodeURIComponent(query)}`);
             state.instrumentPicker.candidates = Array.isArray(candidates) ? candidates : [];
-            state.instrumentPicker.selectedIndex = state.instrumentPicker.candidates.length ? 0 : -1;
             if (!state.instrumentPicker.candidates.length) {
                 state.instrumentPicker.error = `No supported routes found for ${query.toUpperCase()}.`;
             }
@@ -728,12 +802,153 @@
         focusDraftRow(rowIndex);
     }
 
+    async function openCatalogDialog() {
+        dom.catalogDialog.classList.remove("hidden");
+        dom.catalogDialog.setAttribute("aria-hidden", "false");
+        dom.catalogDrilldownHead.classList.add("hidden");
+
+        if (state.catalogData) {
+            renderCatalogPivot();
+        } else {
+            setCatalogLoadingState(1);
+            try {
+                state.catalogData = await api("/api/catalog");
+                renderCatalogPivot();
+            } catch (error) {
+                setCatalogError(error.message);
+            }
+        }
+
+        dom.catalogDialogPanel.focus({preventScroll: true});
+    }
+
+    function closeCatalogDialog() {
+        dom.catalogDialog.classList.add("hidden");
+        dom.catalogDialog.setAttribute("aria-hidden", "true");
+        dom.catalogDrilldownHead.classList.add("hidden");
+        state.catalogData = null;
+        dom.catalogDialogRows.innerHTML = "";
+    }
+
+    function onCatalogDialogClick(event) {
+        if (event.target.dataset.action === "close-catalog") {
+            closeCatalogDialog();
+        }
+    }
+
+    function onCatalogRowClick(event) {
+        const cell = event.target.closest("td[data-action]");
+        if (!cell) {
+            return;
+        }
+        const exchangeName = cell.dataset.exchange;
+        const action = cell.dataset.action;
+
+        if (action === "catalog-drill-exchange") {
+            const entry = (state.catalogData || []).find(e => e.name === exchangeName);
+            openCatalogDrilldown(exchangeName, null, entry?.displayName, "All Instruments");
+        } else if (action === "catalog-drill-type") {
+            const entry = (state.catalogData || []).find(e => e.name === exchangeName);
+            const assetTypeName = cell.dataset.assetType;
+            const at = entry?.assetTypes?.find(a => a.name === assetTypeName);
+            openCatalogDrilldown(exchangeName, assetTypeName, entry?.displayName, at?.label);
+        }
+    }
+
+    async function openCatalogDrilldown(exchangeName, assetTypeName, exchangeDisplayName, assetTypeLabel) {
+        const title = assetTypeName
+            ? `${exchangeDisplayName} — ${assetTypeLabel}`
+            : exchangeDisplayName;
+        dom.catalogDrilldownHead.classList.remove("hidden");
+        dom.catalogDrilldownTitle.textContent = title || "";
+        setCatalogLoadingState(2);
+
+        try {
+            const url = assetTypeName
+                ? `/api/catalog/${encodeURIComponent(exchangeName)}/instruments?assetType=${encodeURIComponent(assetTypeName)}`
+                : `/api/catalog/${encodeURIComponent(exchangeName)}/instruments`;
+            const instruments = await api(url);
+            renderDrilldownView(instruments);
+        } catch (error) {
+            setCatalogError(error.message);
+        }
+    }
+
+    function closeCatalogDrilldown() {
+        dom.catalogDrilldownHead.classList.add("hidden");
+        renderCatalogPivot();
+    }
+
+    function renderCatalogPivot() {
+        const catalog = state.catalogData;
+        if (!Array.isArray(catalog) || !catalog.length) {
+            dom.catalogTableHead.innerHTML = `<tr><th>Exchange</th></tr>`;
+            dom.catalogDialogRows.innerHTML = `<tr><td class="empty-row"><strong>No exchanges found.</strong></td></tr>`;
+            return;
+        }
+
+        const assetTypeMap = new Map();
+        for (const exchange of catalog) {
+            for (const at of (exchange.assetTypes || [])) {
+                if (!assetTypeMap.has(at.name)) {
+                    assetTypeMap.set(at.name, at.label);
+                }
+            }
+        }
+        const assetTypes = Array.from(assetTypeMap.entries());
+
+        dom.catalogTableHead.innerHTML = `<tr>
+            <th>Exchange</th>
+            ${assetTypes.map(([, label]) => `<th class="number-cell">${escapeHtml(label)}</th>`).join("")}
+        </tr>`;
+
+        let html = "";
+        for (const exchange of catalog) {
+            const countByType = new Map((exchange.assetTypes || []).map(at => [at.name, at.tickerCount]));
+            html += `<tr>`;
+            html += `<td class="catalog-exchange-cell" data-action="catalog-drill-exchange" data-exchange="${escapeAttribute(exchange.name)}">${escapeHtml(exchange.displayName)}</td>`;
+            for (const [atName] of assetTypes) {
+                const count = countByType.get(atName);
+                if (count != null) {
+                    html += `<td class="number-cell catalog-count-cell" data-action="catalog-drill-type" data-exchange="${escapeAttribute(exchange.name)}" data-asset-type="${escapeAttribute(atName)}">${count}</td>`;
+                } else {
+                    html += `<td class="number-cell placeholder-cell">—</td>`;
+                }
+            }
+            html += `</tr>`;
+        }
+        dom.catalogDialogRows.innerHTML = html;
+    }
+
+    function renderDrilldownView(instruments) {
+        dom.catalogTableHead.innerHTML = `<tr><th>Symbol</th><th>Asset Type</th></tr>`;
+        if (!Array.isArray(instruments) || !instruments.length) {
+            dom.catalogDialogRows.innerHTML = `<tr><td class="empty-row" colspan="2"><strong>No instruments found.</strong></td></tr>`;
+            return;
+        }
+        dom.catalogDialogRows.innerHTML = instruments
+            .map(inst => `<tr>
+                <td class="number-cell">${escapeHtml(inst.symbol)}</td>
+                <td>${escapeHtml(inst.assetTypeLabel)}</td>
+            </tr>`)
+            .join("");
+    }
+
+    function setCatalogLoadingState(colSpan) {
+        dom.catalogDialogRows.innerHTML = `<tr><td class="empty-row" colspan="${colSpan}"><strong>Loading…</strong></td></tr>`;
+    }
+
+    function setCatalogError(message) {
+        const cols = dom.catalogTableHead.querySelectorAll("th").length || 1;
+        dom.catalogDialogRows.innerHTML = `<tr><td class="empty-row" colspan="${cols}"><strong>Error</strong><span>${escapeHtml(message || "Unable to load data.")}</span></td></tr>`;
+    }
+
     function onInstrumentPickerRowClick(event) {
         const row = event.target.closest("tr[data-candidate-index]");
         if (!row) {
             return;
         }
-        state.instrumentPicker.selectedIndex = parseInteger(row.dataset.candidateIndex);
+        updateInstrumentSelection(parseInteger(row.dataset.candidateIndex), event);
         renderInstrumentDialog();
     }
 
@@ -748,40 +963,67 @@
         if (!row) {
             return;
         }
-        state.instrumentPicker.selectedIndex = parseInteger(row.dataset.candidateIndex);
+        const candidate = state.instrumentPicker.candidates[parseInteger(row.dataset.candidateIndex)];
+        if (!candidate) {
+            return;
+        }
+        state.instrumentPicker.selectedKeys = new Set([candidateKey(candidate)]);
+        state.instrumentPicker.focusedIndex = parseInteger(row.dataset.candidateIndex);
+        state.instrumentPicker.anchorIndex = state.instrumentPicker.focusedIndex;
         renderInstrumentDialog();
         confirmInstrumentSelection();
     }
 
     async function confirmInstrumentSelection() {
         const picker = state.instrumentPicker;
-        const candidate = picker.candidates[picker.selectedIndex];
-        if (!picker.open || !candidate) {
-            showToast("Select a route before adding the row.");
+        const selectedCandidates = picker.candidates.filter(candidate => picker.selectedKeys.has(candidateKey(candidate)));
+        if (!picker.open || !selectedCandidates.length) {
+            showToast("Select at least one route before adding the row.");
+            return;
+        }
+
+        const targetRows = planTargetRows(selectedCandidates.length, picker.rowIndex);
+        if (targetRows.length < selectedCandidates.length) {
+            showToast(`Not enough open watchlist rows for ${selectedCandidates.length} instruments.`);
             return;
         }
 
         state.instrumentPicker.submitting = true;
         renderInstrumentDialog();
 
+        const createdMarkets = [];
         try {
-            const created = await api("/api/markets", {
-                method: "POST",
-                body: JSON.stringify({
-                    symbol: candidate.symbol,
-                    exchange: candidate.exchange,
-                    assetType: candidate.assetType,
-                    rowIndex: picker.rowIndex
-                })
-            });
+            for (let index = 0; index < selectedCandidates.length; index += 1) {
+                const candidate = selectedCandidates[index];
+                const created = await api("/api/markets", {
+                    method: "POST",
+                    body: JSON.stringify({
+                        symbol: candidate.symbol,
+                        exchange: candidate.exchange,
+                        assetType: candidate.assetType,
+                        rowIndex: targetRows[index]
+                    })
+                });
+                createdMarkets.push(created);
+                state.markets = mergeById(state.markets, created);
+                state.marketDrafts.delete(targetRows[index]);
+            }
 
-            state.markets = mergeById(state.markets, created);
-            state.marketDrafts.delete(picker.rowIndex);
             state.instrumentPicker = defaultInstrumentPicker();
-            selectMarket(created.id, state.selectedSide, true);
+            if (createdMarkets.length) {
+                selectMarket(createdMarkets[0].id, state.selectedSide, true);
+            }
             renderAll();
-            showToast(`Added ${created.symbol} on ${formatEnumLabel(created.exchange)}.`);
+            showToast(createdMarkets.length === 1
+                ? `Added ${createdMarkets[0].symbol} on ${formatEnumLabel(createdMarkets[0].exchange)}.`
+                : `Added ${createdMarkets.length} instruments to the watchlist.`);
         } catch (error) {
+            if (createdMarkets.length) {
+                state.instrumentPicker = defaultInstrumentPicker();
+                renderAll();
+                showToast(`Added ${createdMarkets.length} instruments before error: ${error.message || "Unable to add the remaining rows."}`);
+                return;
+            }
             state.instrumentPicker.submitting = false;
             state.instrumentPicker.error = error.message || "Unable to add the watchlist row.";
             renderInstrumentDialog();
@@ -805,8 +1047,13 @@
 
         dom.instrumentDialogTitle.textContent = `Resolve ${String(picker.query || "").toUpperCase()}`;
         dom.instrumentDialogSubtitle.textContent = `Watchlist row ${picker.rowIndex + 1}: choose the exchange and asset class to subscribe.`;
-        dom.confirmInstrumentButton.disabled = picker.loading || picker.submitting || picker.selectedIndex < 0;
-        dom.confirmInstrumentButton.textContent = picker.submitting ? "Adding..." : "Add Instrument";
+        const selectedCount = picker.selectedKeys.size;
+        dom.confirmInstrumentButton.disabled = picker.loading || picker.submitting || selectedCount === 0;
+        dom.confirmInstrumentButton.textContent = picker.submitting
+            ? "Adding..."
+            : selectedCount > 1
+                ? `Add ${selectedCount} Instruments`
+                : "Add Instrument";
 
         if (picker.loading) {
             dom.instrumentDialogRows.innerHTML = `
@@ -833,7 +1080,11 @@
         }
 
         dom.instrumentDialogRows.innerHTML = picker.candidates.map((candidate, index) => `
-            <tr data-candidate-index="${index}" class="${index === picker.selectedIndex ? "selected" : ""}">
+            <tr
+                data-candidate-index="${index}"
+                tabindex="${picker.focusedIndex === index ? "0" : "-1"}"
+                aria-selected="${picker.selectedKeys.has(candidateKey(candidate)) ? "true" : "false"}"
+                class="${picker.selectedKeys.has(candidateKey(candidate)) ? "selected" : ""}${picker.focusedIndex === index ? " focused" : ""}">
                 <td>
                     <div class="symbol-cell">
                         <strong>${escapeHtml(candidate.symbol || "--")}</strong>
@@ -846,9 +1097,16 @@
                 <td>${escapeHtml(candidate.description || "--")}</td>
             </tr>
         `).join("");
+        restoreInstrumentPickerFocus();
     }
 
     function onDocumentKeyDown(event) {
+        if (event.key === "Escape" && !dom.catalogDialog.classList.contains("hidden")) {
+            event.preventDefault();
+            closeCatalogDialog();
+            return;
+        }
+
         if (!state.instrumentPicker.open) {
             return;
         }
@@ -859,33 +1117,100 @@
             return;
         }
 
-        if (event.key === "ArrowDown") {
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault();
-            moveInstrumentSelection(1);
+            moveInstrumentFocus(event.key === "ArrowDown" ? 1 : -1, event.shiftKey);
             return;
         }
 
-        if (event.key === "ArrowUp") {
+        if (event.key === " " && !state.instrumentPicker.loading && !state.instrumentPicker.submitting) {
             event.preventDefault();
-            moveInstrumentSelection(-1);
+            if (Number.isInteger(state.instrumentPicker.focusedIndex)) {
+                updateInstrumentSelection(state.instrumentPicker.focusedIndex, event);
+                renderInstrumentDialog();
+            }
             return;
         }
 
-        if (event.key === "Enter" && !state.instrumentPicker.loading && !state.instrumentPicker.submitting) {
+        if (event.key === "Enter"
+            && !state.instrumentPicker.loading
+            && !state.instrumentPicker.submitting
+            && state.instrumentPicker.selectedKeys.size > 0) {
             event.preventDefault();
             confirmInstrumentSelection();
         }
     }
 
-    function moveInstrumentSelection(direction) {
-        if (!state.instrumentPicker.candidates.length) {
+    function updateInstrumentSelection(candidateIndex, event = {}) {
+        const candidate = state.instrumentPicker.candidates[candidateIndex];
+        if (!candidate) {
             return;
         }
-        const nextIndex = state.instrumentPicker.selectedIndex < 0
-            ? 0
-            : (state.instrumentPicker.selectedIndex + direction + state.instrumentPicker.candidates.length) % state.instrumentPicker.candidates.length;
-        state.instrumentPicker.selectedIndex = nextIndex;
+
+        const key = candidateKey(candidate);
+        const metaSelection = Boolean(event.metaKey || event.ctrlKey);
+        const rangeSelection = Boolean(event.shiftKey);
+
+        if (rangeSelection && Number.isInteger(state.instrumentPicker.anchorIndex)) {
+            const start = Math.min(state.instrumentPicker.anchorIndex, candidateIndex);
+            const end = Math.max(state.instrumentPicker.anchorIndex, candidateIndex);
+            const nextSelection = new Set();
+            for (let index = start; index <= end; index += 1) {
+                const rangedCandidate = state.instrumentPicker.candidates[index];
+                if (rangedCandidate) {
+                    nextSelection.add(candidateKey(rangedCandidate));
+                }
+            }
+            state.instrumentPicker.selectedKeys = nextSelection;
+        } else if (metaSelection) {
+            if (state.instrumentPicker.selectedKeys.has(key)) {
+                state.instrumentPicker.selectedKeys.delete(key);
+            } else {
+                state.instrumentPicker.selectedKeys.add(key);
+            }
+            state.instrumentPicker.selectedKeys = new Set(state.instrumentPicker.selectedKeys);
+            state.instrumentPicker.anchorIndex = candidateIndex;
+        } else {
+            state.instrumentPicker.selectedKeys = new Set([key]);
+            state.instrumentPicker.anchorIndex = candidateIndex;
+        }
+
+        state.instrumentPicker.focusedIndex = candidateIndex;
+    }
+
+    function moveInstrumentFocus(direction, extendSelection) {
+        const picker = state.instrumentPicker;
+        if (!picker.candidates.length) {
+            return;
+        }
+
+        const currentIndex = Number.isInteger(picker.focusedIndex) ? picker.focusedIndex : 0;
+        const nextIndex = Math.max(0, Math.min(picker.candidates.length - 1, currentIndex + direction));
+        picker.focusedIndex = nextIndex;
+
+        if (extendSelection) {
+            updateInstrumentSelection(nextIndex, {shiftKey: true});
+        }
+
         renderInstrumentDialog();
+    }
+
+    function restoreInstrumentPickerFocus() {
+        const picker = state.instrumentPicker;
+        if (!picker.open || !Number.isInteger(picker.focusedIndex)) {
+            return;
+        }
+        const row = dom.instrumentDialogRows.querySelector(`tr[data-candidate-index="${picker.focusedIndex}"]`);
+        row?.focus({preventScroll: true});
+    }
+
+    function candidateKey(candidate) {
+        return [
+            candidate?.exchange || "",
+            candidate?.assetType || "",
+            candidate?.exchangeSymbol || "",
+            candidate?.symbol || ""
+        ].join("|");
     }
 
     async function api(url, options = {}) {
@@ -946,11 +1271,34 @@
         input.select();
     }
 
+    function planTargetRows(count, startingRow) {
+        const occupiedRows = new Set(
+            state.markets
+                .map(market => normalizeRowIndex(market.rowIndex))
+                .filter(Number.isInteger)
+        );
+        const maxRows = configuredMaxRows();
+        const safeStart = Number.isInteger(startingRow) ? startingRow : 0;
+        const rows = [];
+
+        for (let offset = 0; offset < maxRows && rows.length < count; offset += 1) {
+            const rowIndex = (safeStart + offset) % maxRows;
+            if (occupiedRows.has(rowIndex)) {
+                continue;
+            }
+            rows.push(rowIndex);
+            occupiedRows.add(rowIndex);
+        }
+
+        return rows;
+    }
+
     function computeSpread(bid, ask) {
         const bidValue = toNumber(bid);
         const askValue = toNumber(ask);
-        return Number.isFinite(bidValue) && Number.isFinite(askValue)
-            ? askValue - bidValue
+        const mid = (bidValue + askValue) / 2;
+        return Number.isFinite(bidValue) && Number.isFinite(askValue) && mid > 0
+            ? ((askValue - bidValue) / mid) * 10000
             : null;
     }
 

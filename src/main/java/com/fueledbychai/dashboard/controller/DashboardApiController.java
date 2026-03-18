@@ -11,10 +11,11 @@ import com.fueledbychai.dashboard.api.PairSubscriptionRequest;
 import com.fueledbychai.dashboard.api.PriceHistoryPoint;
 import com.fueledbychai.dashboard.model.OrderSide;
 import com.fueledbychai.dashboard.model.OrderType;
-import com.fueledbychai.dashboard.model.TimeInForce;
 import com.fueledbychai.dashboard.model.SupportedAssetType;
 import com.fueledbychai.dashboard.model.SupportedExchange;
+import com.fueledbychai.dashboard.model.TimeInForce;
 import com.fueledbychai.dashboard.service.DashboardStateService;
+import com.fueledbychai.dashboard.service.MarketDataCatalogService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -37,9 +38,12 @@ import java.util.Map;
 public class DashboardApiController {
 
     private final DashboardStateService dashboardStateService;
+    private final MarketDataCatalogService marketDataCatalogService;
 
-    public DashboardApiController(DashboardStateService dashboardStateService) {
+    public DashboardApiController(DashboardStateService dashboardStateService,
+                                  MarketDataCatalogService marketDataCatalogService) {
         this.dashboardStateService = dashboardStateService;
+        this.marketDataCatalogService = marketDataCatalogService;
     }
 
     @GetMapping("/snapshot")
@@ -103,15 +107,41 @@ public class DashboardApiController {
         dashboardStateService.removePair(pairId);
     }
 
+    @GetMapping("/catalog/{exchangeName}/instruments")
+    public List<Map<String, String>> catalogInstruments(@PathVariable String exchangeName,
+                                                        @RequestParam(required = false) String assetType) {
+        return marketDataCatalogService.instrumentsForExchange(exchangeName, assetType);
+    }
+
+    @GetMapping("/catalog")
+    public List<Map<String, Object>> catalog() {
+        return marketDataCatalogService.supportedExchanges().stream()
+                .map(exchange -> {
+                    Map<String, Integer> counts = marketDataCatalogService.tickerCountsForExchange(exchange.name());
+                    return Map.<String, Object>of(
+                            "name", exchange.name(),
+                            "displayName", exchange.displayName(),
+                            "assetTypes", exchange.supportedAssetTypes().stream()
+                                    .map(at -> Map.<String, Object>of(
+                                            "name", at.name(),
+                                            "label", at.displayName(),
+                                            "tickerCount", counts.getOrDefault(at.name(), 0)
+                                    ))
+                                    .toList()
+                    );
+                })
+                .toList();
+    }
+
     @GetMapping("/metadata")
     public Map<String, Object> metadata() {
         return Map.of(
-                "exchanges", Arrays.stream(SupportedExchange.values())
+                "exchanges", marketDataCatalogService.supportedExchanges().stream()
                         .map(value -> Map.of(
                                 "value", value.name(),
                                 "label", value.displayName()))
                         .toList(),
-                "assetTypes", Arrays.stream(SupportedAssetType.values())
+                "assetTypes", marketDataCatalogService.supportedAssetTypes().stream()
                         .map(value -> Map.of(
                                 "value", value.name(),
                                 "label", value.displayName()))

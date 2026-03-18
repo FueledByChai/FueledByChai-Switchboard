@@ -27,8 +27,9 @@ public class ProxyInitializer {
             return;
         }
 
+        System.setProperty("fueledbychai.run.proxy", Boolean.TRUE.toString());
         System.setProperty("socksProxyHost", proxy.getHost());
         System.setProperty("socksProxyPort", Integer.toString(proxy.getPort()));
-        log.info("Configured JVM SOCKS proxy {}:{}", proxy.getHost(), proxy.getPort());
+        log.info("Configured FueledByChai proxy mode with JVM SOCKS proxy {}:{}", proxy.getHost(), proxy.getPort());
     }
 }

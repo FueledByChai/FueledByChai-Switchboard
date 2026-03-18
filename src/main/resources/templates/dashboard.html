@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FueledByChai Workstation</title>
+    <title>Switchboard</title>
     <link rel="stylesheet" th:href="@{/css/dashboard.css}" href="/css/dashboard.css">
 </head>
 <body>
@@ -14,8 +14,8 @@
     <header class="topbar">
         <div class="brand-block">
             <p class="brand-kicker">FueledByChai</p>
-            <h1>Trader Workstation</h1>
-            <p class="brand-copy">Spreadsheet-style watchlist, staged order entry, and open-order monitoring in one screen.</p>
+            <h1>Switchboard</h1>
+            <p class="brand-copy">Route quotes and orders across multiple crypto exchanges from a single interface.</p>
         </div>
 
         <div class="topbar-metrics">
@@ -39,6 +39,10 @@
                 <span>Inactive</span>
                 <strong id="inactiveOrderCount">0</strong>
             </article>
+            <article class="metric-card">
+                <span>Coverage</span>
+                <button type="button" id="openCatalogBtn" class="catalog-count-btn">-- Exchanges</button>
+            </article>
         </div>
     </header>
 
@@ -57,7 +61,6 @@
                 <table class="workstation-table watchlist-table">
                     <thead>
                     <tr>
-                        <th class="row-index-head">#</th>
                         <th>Ticker</th>
                         <th>Asset</th>
                         <th>Route</th>
@@ -67,7 +70,6 @@
                         <th>Last</th>
                         <th>Volume</th>
                         <th>Fund %</th>
-                        <th>Updated</th>
                         <th>Actions</th>
                     </tr>
                     </thead>
@@ -224,6 +226,40 @@
         <div class="instrument-dialog-actions">
             <button type="button" id="cancelInstrumentButton" class="secondary-btn">Cancel</button>
             <button type="button" id="confirmInstrumentButton" class="primary-btn">Add Instrument</button>
+        </div>
+    </section>
+</div>
+
+<div id="catalogDialog" class="instrument-dialog hidden" aria-hidden="true">
+    <div class="instrument-dialog-backdrop" data-action="close-catalog"></div>
+    <section id="catalogDialogPanel" class="instrument-dialog-panel catalog-dialog-panel" role="dialog" aria-modal="true" aria-labelledby="catalogDialogTitle" tabindex="-1">
+        <div class="instrument-dialog-head">
+            <div>
+                <p class="panel-kicker">Market Data</p>
+                <h2 id="catalogDialogTitle">Supported Exchanges</h2>
+                <p>Available venues and instrument coverage by asset type.</p>
+            </div>
+            <button type="button" id="closeCatalogDialogButton" class="icon-btn dialog-close" aria-label="Close exchange catalog">×</button>
+        </div>
+
+        <div id="catalogDrilldownHead" class="catalog-drilldown-head hidden">
+            <button type="button" id="backFromDrilldownBtn" class="secondary-btn">← Back</button>
+            <span id="catalogDrilldownTitle" class="catalog-drilldown-title"></span>
+        </div>
+
+        <div class="table-wrap picker-wrap">
+            <table class="workstation-table">
+                <thead id="catalogTableHead">
+                <tr>
+                    <th>Exchange</th>
+                </tr>
+                </thead>
+                <tbody id="catalogDialogRows"></tbody>
+            </table>
+        </div>
+
+        <div class="instrument-dialog-actions">
+            <button type="button" id="catalogCloseButton" class="primary-btn">Close</button>
         </div>
     </section>
 </div>

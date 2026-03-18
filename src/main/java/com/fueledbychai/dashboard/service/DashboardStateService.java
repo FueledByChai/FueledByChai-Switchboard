@@ -63,17 +63,20 @@ public class DashboardStateService {
     private static final BigDecimal APR_TO_BPS_PER_HOUR = BigDecimal.valueOf(100).divide(BigDecimal.valueOf(24L * 365L), MC);
     private static final BigDecimal BPS_PER_HOUR_TO_APR = BigDecimal.valueOf(24L * 365L).divide(BigDecimal.valueOf(100), MC);
     private static final String PAPER_ORDER_NOTE = "Paper order only. Live exchange execution is not wired in this repo yet.";
-    private static final List<String> LOOKUP_QUOTES = List.of("USDC", "USDT", "USD");
+    private static final List<String> LOOKUP_QUOTES = List.of("USDC", "USDT");
 
     private final DashboardProperties properties;
+    private final MarketDataCatalogService marketDataCatalogService;
     private final Clock clock = Clock.systemUTC();
     private final ConcurrentMap<String, MarketSubscriptionContext> marketsById = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, PairDefinition> pairsById = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, OrderDefinition> ordersById = new ConcurrentHashMap<>();
     private final ConcurrentMap<Exchange, QuoteEngine> enginesByExchange = new ConcurrentHashMap<>();
 
-    public DashboardStateService(DashboardProperties properties) {
+    public DashboardStateService(DashboardProperties properties,
+                                 MarketDataCatalogService marketDataCatalogService) {
         this.properties = properties;
+        this.marketDataCatalogService = marketDataCatalogService;
     }
 
     public int maxRows() {
@@ -86,16 +89,18 @@ public class DashboardStateService {
             throw new IllegalArgumentException("Maximum subscribed markets reached (" + properties.getMaxRows() + ").");
         }
 
-        SupportedExchange exchange = SupportedExchange.fromInput(request.exchange());
+        SupportedExchange exchange = marketDataCatalogService.requireExchange(request.exchange());
         SupportedAssetType assetType = SupportedAssetType.fromInput(request.assetType());
-        if (!exchange.supports(assetType)) {
-            throw new IllegalArgumentException(exchange.displayName() + " does not support " + assetType.displayName() + " routing.");
-        }
-
         String commonSymbol = normalizeRequestedSymbol(request.symbol(), assetType);
         int rowIndex = assignRow(request.rowIndex());
 
-        Ticker ticker = resolveTicker(exchange, assetType, commonSymbol);
+        Ticker ticker = exchange.supports(assetType)
+                ? resolveTicker(exchange, assetType, commonSymbol)
+                : resolveTickerStrict(exchange, assetType, commonSymbol);
+        if (ticker == null) {
+            throw new IllegalArgumentException("Unable to resolve " + commonSymbol + " as " + assetType.displayName()
+                    + " on " + exchange.displayName() + ".");
+        }
         QuoteEngine engine = getOrStartEngine(exchange.exchange());
         String marketId = UUID.randomUUID().toString();
 
@@ -231,19 +236,16 @@ public class DashboardStateService {
         String underlying = extractUnderlying(normalizedQuery);
         Map<String, InstrumentLookupOption> matches = new LinkedHashMap<>();
 
-        for (SupportedAssetType assetType : SupportedAssetType.values()) {
-            for (SupportedExchange exchange : SupportedExchange.values()) {
-                if (!exchange.supports(assetType)) {
-                    continue;
-                }
-                ITickerRegistry registry = safeRegistry(exchange.exchange());
-                if (registry == null) {
-                    continue;
-                }
+        for (SupportedExchange exchange : marketDataCatalogService.supportedExchanges()) {
+            ITickerRegistry registry = safeRegistry(exchange.exchange());
+            if (registry == null) {
+                continue;
+            }
+            for (SupportedAssetType assetType : supportedAssetTypesForLookup(exchange, registry)) {
                 for (String candidate : instrumentLookupCandidates(normalizedQuery, underlying)) {
                     Ticker ticker = resolveUsingRegistryCandidateStrict(registry, assetType.instrumentType(), candidate, exchange.exchange());
                     if (ticker != null) {
-                        addInstrumentLookupOption(matches, exchange, assetType, ticker, normalizedQuery);
+                        addInstrumentLookupOption(matches, exchange, assetType, ticker, candidate);
                     }
                 }
             }
@@ -406,6 +408,31 @@ public class DashboardStateService {
         return ticker;
     }
 
+    private Ticker resolveTickerStrict(SupportedExchange exchange, SupportedAssetType assetType, String commonSymbol) {
+        ITickerRegistry registry = safeRegistry(exchange.exchange());
+        if (registry == null) {
+            return null;
+        }
+        return resolveUsingRegistry(registry, assetType.instrumentType(), commonSymbol, exchange.exchange());
+    }
+
+    List<SupportedAssetType> supportedAssetTypesForLookup(SupportedExchange exchange, ITickerRegistry registry) {
+        LinkedHashSet<SupportedAssetType> assetTypes = new LinkedHashSet<>(exchange.supportedAssetTypes());
+        for (InstrumentType instrumentType : InstrumentType.values()) {
+            if (instrumentType == InstrumentType.NONE) {
+                continue;
+            }
+            try {
+                if (registry.getAllTickersForType(instrumentType).length > 0) {
+                    assetTypes.add(SupportedAssetType.fromInstrumentType(instrumentType));
+                }
+            } catch (RuntimeException e) {
+                log.debug("Ticker registry does not support {} lookup on {}", instrumentType, exchange.name(), e);
+            }
+        }
+        return List.copyOf(assetTypes);
+    }
+
     private ITickerRegistry safeRegistry(Exchange exchange) {
         try {
             return TickerRegistryFactory.getInstance(exchange);
@@ -542,17 +569,18 @@ public class DashboardStateService {
         }
 
         String normalizedExchangeSymbol = exchangeSymbol.trim().toUpperCase(Locale.ROOT);
-        return switch (exchange) {
-            case PARADEX -> canonicalParadexSymbol(assetType, normalizedExchangeSymbol);
-            case LIGHTER -> canonicalLighterSymbol(assetType, normalizedExchangeSymbol, requestedSymbol);
-            case HYPERLIQUID -> canonicalHyperliquidSymbol(normalizedExchangeSymbol, requestedSymbol);
-            case BINANCE_SPOT -> canonicalBinanceSpotSymbol(normalizedExchangeSymbol, requestedSymbol);
+        return switch (exchange.name()) {
+            case "PARADEX" -> canonicalParadexSymbol(assetType, normalizedExchangeSymbol);
+            case "LIGHTER" -> canonicalLighterSymbol(assetType, normalizedExchangeSymbol, requestedSymbol);
+            case "HYPERLIQUID" -> canonicalHyperliquidSymbol(assetType, normalizedExchangeSymbol, requestedSymbol);
+            case "BINANCE_SPOT" -> canonicalBinanceSpotSymbol(normalizedExchangeSymbol, requestedSymbol);
+            default -> canonicalGenericSymbol(assetType, normalizedExchangeSymbol, requestedSymbol);
         };
     }
 
     private String canonicalParadexSymbol(SupportedAssetType assetType, String exchangeSymbol) {
         String normalized = exchangeSymbol;
-        if (assetType == SupportedAssetType.PERP && normalized.endsWith("-PERP")) {
+        if (assetType.instrumentType() == InstrumentType.PERPETUAL_FUTURES && normalized.endsWith("-PERP")) {
             normalized = normalized.substring(0, normalized.length() - "-PERP".length());
         }
         return normalized.replace('-', '/');
@@ -562,18 +590,18 @@ public class DashboardStateService {
         if (exchangeSymbol.contains("/")) {
             return exchangeSymbol;
         }
-        if (assetType == SupportedAssetType.PERP && exchangeSymbol.endsWith("-PERP")) {
+        if (assetType.instrumentType() == InstrumentType.PERPETUAL_FUTURES && exchangeSymbol.endsWith("-PERP")) {
             String base = exchangeSymbol.substring(0, exchangeSymbol.length() - "-PERP".length());
             return normalizeRequestedSymbol(base, assetType);
         }
-        return normalizeRequestedSymbol(requestedSymbol, assetType);
+        return canonicalGenericSymbol(assetType, exchangeSymbol, requestedSymbol);
     }
 
-    private String canonicalHyperliquidSymbol(String exchangeSymbol, String requestedSymbol) {
+    private String canonicalHyperliquidSymbol(SupportedAssetType assetType, String exchangeSymbol, String requestedSymbol) {
         if (exchangeSymbol.contains("/")) {
             return exchangeSymbol;
         }
-        return normalizeRequestedSymbol(exchangeSymbol, SupportedAssetType.PERP);
+        return normalizeRequestedSymbol(exchangeSymbol, assetType);
     }
 
     private String canonicalBinanceSpotSymbol(String exchangeSymbol, String requestedSymbol) {
@@ -582,7 +610,28 @@ public class DashboardStateService {
                 return exchangeSymbol.substring(0, exchangeSymbol.length() - quote.length()) + "/" + quote;
             }
         }
-        return normalizeRequestedSymbol(requestedSymbol, SupportedAssetType.SPOT);
+        return normalizeRequestedSymbol(requestedSymbol, SupportedAssetType.fromInstrumentType(InstrumentType.CRYPTO_SPOT));
+    }
+
+    private String canonicalGenericSymbol(SupportedAssetType assetType, String exchangeSymbol, String requestedSymbol) {
+        if (exchangeSymbol.contains("/")) {
+            return exchangeSymbol;
+        }
+
+        if (assetType.instrumentType() == InstrumentType.PERPETUAL_FUTURES && exchangeSymbol.endsWith("-PERP")) {
+            String base = exchangeSymbol.substring(0, exchangeSymbol.length() - "-PERP".length());
+            return normalizeRequestedSymbol(base, assetType);
+        }
+
+        if (assetType.instrumentType() == InstrumentType.CRYPTO_SPOT || assetType.instrumentType() == InstrumentType.PERPETUAL_FUTURES) {
+            for (String quote : LOOKUP_QUOTES) {
+                if (exchangeSymbol.endsWith(quote) && exchangeSymbol.length() > quote.length()) {
+                    return exchangeSymbol.substring(0, exchangeSymbol.length() - quote.length()) + "/" + quote;
+                }
+            }
+        }
+
+        return normalizeRequestedSymbol(requestedSymbol, assetType);
     }
 
     private int assignRow(Integer requestedRowIndex) {
@@ -628,8 +677,9 @@ public class DashboardStateService {
         if (normalized.contains("/")) {
             return normalized;
         }
-        return switch (assetType) {
-            case PERP, SPOT -> normalized + "/USDC";
+        return switch (assetType.instrumentType()) {
+            case CRYPTO_SPOT, PERPETUAL_FUTURES -> normalized + "/USDC";
+            default -> normalized;
         };
     }
 
