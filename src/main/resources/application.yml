@@ -1,13 +1,13 @@
 spring:
   application:
-    name: fueledbychai-dashboard
+    name: fueledbychai-switchboard
   thymeleaf:
     cache: false
 
 server:
   shutdown: graceful
 
-dashboard:
+switchboard:
   broadcast-interval-ms: 100
   history-minutes: 10
   max-rows: 50

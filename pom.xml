@@ -12,10 +12,10 @@
     </parent>
 
     <groupId>com.fueledbychai</groupId>
-    <artifactId>fueledbychai-dashboard</artifactId>
+    <artifactId>fueledbychai-switchboard</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>fueledbychai-dashboard</name>
-    <description>Streaming market data dashboard powered by FueledByChai QuoteEngine</description>
+    <name>fueledbychai-switchboard</name>
+    <description>Streaming market data switchboard powered by FueledByChai QuoteEngine</description>
 
     <properties>
         <java.version>21</java.version>
@@ -57,26 +57,6 @@
         </dependency>
         <dependency>
             <groupId>com.fueledbychai</groupId>
-            <artifactId>paradex-common-api</artifactId>
-            <version>${fueledbychai.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.fueledbychai</groupId>
-            <artifactId>lighter-common-api</artifactId>
-            <version>${fueledbychai.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.fueledbychai</groupId>
-            <artifactId>hyperliquid-common-api</artifactId>
-            <version>${fueledbychai.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.fueledbychai</groupId>
-            <artifactId>binance-common-api</artifactId>
-            <version>${fueledbychai.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.fueledbychai</groupId>
             <artifactId>paradex-market-data-impl</artifactId>
             <version>${fueledbychai.version}</version>
         </dependency>
@@ -92,14 +72,14 @@
         </dependency>
         <dependency>
             <groupId>com.fueledbychai</groupId>
-            <artifactId>binance-market-data-impl</artifactId>
-            <version>${fueledbychai.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.fueledbychai</groupId>
             <artifactId>binance-futures-market-data-impl</artifactId>
             <version>${fueledbychai.version}</version>
         </dependency>        
+        <dependency>
+            <groupId>com.fueledbychai</groupId>
+            <artifactId>binance-spot-market-data-impl</artifactId>
+            <version>${fueledbychai.version}</version>
+        </dependency>               
         <dependency>
             <groupId>com.fueledbychai</groupId>
             <artifactId>aster-market-data-impl</artifactId>
@@ -121,6 +101,12 @@
             <artifactId>okx-market-data-impl</artifactId>
             <version>${fueledbychai.version}</version>
         </dependency>                             
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <optional>true</optional>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>

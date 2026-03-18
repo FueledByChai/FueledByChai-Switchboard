@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Switchboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&display=swap">
+    <link rel="stylesheet" th:href="@{/css/switchboard.css}" href="/css/switchboard.css">
+</head>
+<body>
+<div class="page-noise"></div>
+<div class="scanline"></div>
+
+<main class="workstation">
+    <header class="topbar">
+        <div class="brand-block">
+            <p class="brand-kicker">FueledByChai</p>
+            <h1>Switchboard</h1>
+            <p class="brand-copy">Route quotes and orders across multiple crypto exchanges from a single interface.</p>
+        </div>
+
+        <div class="topbar-metrics">
+            <article class="metric-card">
+                <span>Connection</span>
+                <strong id="connectionBadge" class="status-badge disconnected">Disconnected</strong>
+            </article>
+            <article class="metric-card">
+                <span>Server Time</span>
+                <strong id="serverClock">--:--:--</strong>
+            </article>
+            <article class="metric-card">
+                <span>Watchlist</span>
+                <strong id="watchlistCount">0</strong>
+            </article>
+            <article class="metric-card">
+                <span>Open Orders</span>
+                <strong id="openOrderCount">0</strong>
+            </article>
+            <article class="metric-card">
+                <span>Inactive</span>
+                <strong id="inactiveOrderCount">0</strong>
+            </article>
+            <article class="metric-card">
+                <span>Coverage</span>
+                <button type="button" id="openCatalogBtn" class="catalog-count-btn">-- Exchanges</button>
+            </article>
+        </div>
+    </header>
+
+    <section class="workspace-grid">
+        <section class="panel panel-watchlist">
+            <div class="panel-head">
+                <div>
+                    <p class="panel-kicker">Watchlist</p>
+                    <h2>Market Monitor</h2>
+                    <p>Type in the ticker column and press Return to resolve the route, venue, and asset class.</p>
+                </div>
+                <div class="mode-pill" id="orderModePill">Paper Gateway</div>
+            </div>
+
+            <div class="table-wrap watchlist-wrap">
+                <table class="workstation-table watchlist-table">
+                    <thead>
+                    <tr>
+                        <th>Ticker</th>
+                        <th>Asset</th>
+                        <th>Route</th>
+                        <th>Bid</th>
+                        <th>Ask</th>
+                        <th>Spread</th>
+                        <th>Last</th>
+                        <th>Volume</th>
+                        <th>Fund %</th>
+                        <th>Actions</th>
+                    </tr>
+                    </thead>
+                    <tbody id="marketRows"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <aside class="panel panel-ticket">
+            <div class="panel-head">
+                <div>
+                    <p class="panel-kicker">Order Entry</p>
+                    <h2>Ticket</h2>
+                    <p>Select a row or click Buy or Sell from the monitor to stage an order.</p>
+                </div>
+            </div>
+
+            <div id="ticketEmpty" class="ticket-empty">
+                <strong>No market selected</strong>
+                <p>Choose a watchlist row to open an order ticket for that route.</p>
+            </div>
+
+            <div id="ticketShell" class="ticket-shell hidden">
+                <section class="ticket-context">
+                    <div class="ticket-symbols">
+                        <strong id="selectedTicker">--</strong>
+                        <span id="selectedExchangeSymbol">--</span>
+                    </div>
+                    <div class="ticket-tags">
+                        <span class="tag" id="selectedRoute">--</span>
+                        <span class="tag" id="selectedAsset">--</span>
+                    </div>
+                    <div class="quote-strip">
+                        <article>
+                            <span>Bid</span>
+                            <strong id="selectedBid">--</strong>
+                        </article>
+                        <article>
+                            <span>Ask</span>
+                            <strong id="selectedAsk">--</strong>
+                        </article>
+                        <article>
+                            <span>Last</span>
+                            <strong id="selectedLast">--</strong>
+                        </article>
+                    </div>
+                </section>
+
+                <form id="orderForm" class="order-form">
+                    <div class="side-toggle">
+                        <button type="button" class="side-btn buy active" data-side="BUY">Buy</button>
+                        <button type="button" class="side-btn sell" data-side="SELL">Sell</button>
+                    </div>
+
+                    <label>
+                        <span>Order Type</span>
+                        <select id="orderTypeSelect" name="orderType" required></select>
+                    </label>
+                    <label>
+                        <span>Time In Force</span>
+                        <select id="timeInForceSelect" name="timeInForce" required></select>
+                    </label>
+                    <label>
+                        <span>Quantity</span>
+                        <input id="quantityInput" name="quantity" type="number" step="any" min="0" placeholder="0.01" required>
+                    </label>
+                    <label id="limitPriceField">
+                        <span>Limit Price</span>
+                        <input id="limitPriceInput" name="limitPrice" type="number" step="any" min="0" placeholder="0.00">
+                    </label>
+
+                    <section class="ticket-summary">
+                        <article>
+                            <span>Reference</span>
+                            <strong id="ticketReferencePrice">--</strong>
+                        </article>
+                        <article>
+                            <span>Est. Notional</span>
+                            <strong id="ticketEstimatedNotional">--</strong>
+                        </article>
+                        <article>
+                            <span>Mode</span>
+                            <strong id="ticketMode">Paper</strong>
+                        </article>
+                    </section>
+
+                    <p id="ticketNote" class="ticket-note"></p>
+
+                    <button type="submit" id="submitOrderButton" class="primary-btn submit-btn">Transmit Order</button>
+                </form>
+            </div>
+        </aside>
+
+        <section class="panel panel-orders">
+            <div class="panel-head">
+                <div>
+                    <p class="panel-kicker">Blotter</p>
+                    <h2>Open Orders</h2>
+                    <p>Active staged orders stay visible here until canceled.</p>
+                </div>
+            </div>
+
+            <div class="table-wrap orders-wrap">
+                <table class="workstation-table orders-table">
+                    <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Symbol</th>
+                        <th>Route</th>
+                        <th>Side</th>
+                        <th>Type</th>
+                        <th>TIF</th>
+                        <th>Qty</th>
+                        <th>Limit</th>
+                        <th>Ref</th>
+                        <th>Status</th>
+                        <th></th>
+                    </tr>
+                    </thead>
+                    <tbody id="orderRows"></tbody>
+                </table>
+            </div>
+        </section>
+    </section>
+</main>
+
+<div id="instrumentDialog" class="instrument-dialog hidden" aria-hidden="true">
+    <div class="instrument-dialog-backdrop" data-action="close-picker"></div>
+    <section id="instrumentDialogPanel" class="instrument-dialog-panel" role="dialog" aria-modal="true" aria-labelledby="instrumentDialogTitle" tabindex="-1">
+        <div class="instrument-dialog-head">
+            <div>
+                <p class="panel-kicker">Instrument Lookup</p>
+                <h2 id="instrumentDialogTitle">Resolve Symbol</h2>
+                <p id="instrumentDialogSubtitle">Choose the route and asset class for this watchlist row.</p>
+            </div>
+            <button type="button" id="closeInstrumentDialogButton" class="icon-btn dialog-close" aria-label="Close instrument lookup">×</button>
+        </div>
+
+        <div class="table-wrap picker-wrap">
+            <table class="workstation-table picker-table">
+                <thead>
+                <tr>
+                    <th>Symbol</th>
+                    <th>Asset</th>
+                    <th>Route</th>
+                    <th>Exchange Symbol</th>
+                    <th>Details</th>
+                </tr>
+                </thead>
+                <tbody id="instrumentDialogRows"></tbody>
+            </table>
+        </div>
+
+        <div class="instrument-dialog-actions">
+            <button type="button" id="cancelInstrumentButton" class="secondary-btn">Cancel</button>
+            <button type="button" id="confirmInstrumentButton" class="primary-btn">Add Instrument</button>
+        </div>
+    </section>
+</div>
+
+<div id="catalogDialog" class="instrument-dialog hidden" aria-hidden="true">
+    <div class="instrument-dialog-backdrop" data-action="close-catalog"></div>
+    <section id="catalogDialogPanel" class="instrument-dialog-panel catalog-dialog-panel" role="dialog" aria-modal="true" aria-labelledby="catalogDialogTitle" tabindex="-1">
+        <div class="instrument-dialog-head">
+            <div>
+                <p class="panel-kicker">Market Data</p>
+                <h2 id="catalogDialogTitle">Supported Exchanges</h2>
+                <p>Available venues and instrument coverage by asset type.</p>
+            </div>
+            <button type="button" id="closeCatalogDialogButton" class="icon-btn dialog-close" aria-label="Close exchange catalog">×</button>
+        </div>
+
+        <div id="catalogDrilldownHead" class="catalog-drilldown-head hidden">
+            <button type="button" id="backFromDrilldownBtn" class="secondary-btn">← Back</button>
+            <span id="catalogDrilldownTitle" class="catalog-drilldown-title"></span>
+        </div>
+
+        <div class="table-wrap picker-wrap">
+            <table class="workstation-table">
+                <thead id="catalogTableHead">
+                <tr>
+                    <th>Exchange</th>
+                </tr>
+                </thead>
+                <tbody id="catalogDialogRows"></tbody>
+            </table>
+        </div>
+
+        <div class="instrument-dialog-actions">
+            <button type="button" id="catalogCloseButton" class="primary-btn">Close</button>
+        </div>
+    </section>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script th:src="@{/js/switchboard.js}" src="/js/switchboard.js"></script>
+</body>
+</html>
