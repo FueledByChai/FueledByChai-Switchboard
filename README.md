@@ -1,4 +1,4 @@
-# FueledByChai Workstation
+# FueledByChai Switchboard
 
 Spring Boot + Thymeleaf trading workstation for live crypto market data using FueledByChai `QuoteEngine` implementations.
 
