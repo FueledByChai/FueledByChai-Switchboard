@@ -13,17 +13,494 @@
     --text: #edf2fb;
     --muted: #8f9fb3;
     --accent: #7db9ff;
+    --accent-strong: #a0d6ff;
     --accent-soft: rgba(125, 185, 255, 0.18);
     --buy: #30cc8c;
     --buy-soft: rgba(48, 204, 140, 0.14);
     --sell: #ff8585;
     --sell-soft: rgba(255, 133, 133, 0.14);
+    --bg-glow-a: rgba(125, 185, 255, 0.1);
+    --bg-glow-b: rgba(48, 204, 140, 0.06);
+    --page-noise-opacity: 0.38;
+    --scanline-color: rgba(255, 255, 255, 0.02);
+    --scanline-opacity: 0.2;
+    --surface-top-highlight: rgba(255, 255, 255, 0.03);
+    --surface-bottom-shade: rgba(7, 11, 17, 0.2);
+    --status-card-top-highlight: rgba(255, 255, 255, 0.035);
+    --status-card-bottom-shade: rgba(0, 0, 0, 0.08);
+    --table-wrap-highlight: rgba(255, 255, 255, 0.02);
+    --table-head-highlight: rgba(255, 255, 255, 0.02);
+    --control-bg: rgba(8, 13, 20, 0.52);
+    --secondary-btn-bg: rgba(255, 255, 255, 0.04);
+    --pill-bg: rgba(255, 255, 255, 0.04);
+    --orders-row-bg: rgba(18, 24, 32, 0.96);
+    --row-hover-bg: rgba(38, 56, 77, 0.94);
+    --selected-row-accent: rgba(125, 185, 255, 0.12);
+    --selected-row-bg: rgba(31, 43, 57, 0.98);
+    --focus-row-ring: rgba(125, 185, 255, 0.28);
     --shadow: 0 28px 68px rgba(1, 6, 12, 0.42);
     --radius-lg: 18px;
     --radius-md: 12px;
     --radius-sm: 8px;
+    --radius-pill: 999px;
+    --table-radius: 10px;
+    --panel-blur: 8px;
+    --font-display: "IBM Plex Sans", "Aptos", "Segoe UI", sans-serif;
     --font-ui: "IBM Plex Sans", "Aptos", "Segoe UI", sans-serif;
     --font-mono: "IBM Plex Mono", "SFMono-Regular", "SF Mono", Menlo, Monaco, monospace;
+    --heading-letter-spacing: -0.03em;
+    --button-letter-spacing: 0.01em;
+    --button-text-transform: none;
+}
+
+html[data-theme="bloomberg-inspired"] {
+    --bg: #14100d;
+    --bg-deep: #090705;
+    --bg-raised: #1b1511;
+    --bg-panel: #211913;
+    --bg-panel-strong: #2c2119;
+    --bg-table-head: #2a1f16;
+    --bg-sheet-row: #120d0a;
+    --bg-sheet-row-alt: #1f1711;
+    --border: rgba(210, 147, 85, 0.26);
+    --border-strong: rgba(255, 172, 73, 0.44);
+    --grid-line: rgba(255, 177, 102, 0.12);
+    --text: #f7ead8;
+    --muted: #c4ab8d;
+    --accent: #ff9d32;
+    --accent-soft: rgba(255, 157, 50, 0.18);
+    --accent-strong: #ffd08c;
+    --buy: #57d48f;
+    --buy-soft: rgba(87, 212, 143, 0.14);
+    --sell: #ff7455;
+    --sell-soft: rgba(255, 116, 85, 0.14);
+    --bg-glow-a: rgba(255, 157, 50, 0.18);
+    --bg-glow-b: rgba(255, 218, 132, 0.08);
+    --surface-top-highlight: rgba(255, 182, 95, 0.06);
+    --surface-bottom-shade: rgba(0, 0, 0, 0.38);
+    --status-card-top-highlight: rgba(255, 157, 50, 0.08);
+    --status-card-bottom-shade: rgba(0, 0, 0, 0.3);
+    --table-wrap-highlight: rgba(255, 172, 73, 0.04);
+    --table-head-highlight: rgba(255, 172, 73, 0.05);
+    --control-bg: rgba(22, 15, 11, 0.92);
+    --secondary-btn-bg: rgba(255, 157, 50, 0.08);
+    --pill-bg: rgba(255, 157, 50, 0.09);
+    --orders-row-bg: rgba(18, 13, 10, 0.98);
+    --row-hover-bg: rgba(54, 38, 22, 0.98);
+    --selected-row-accent: rgba(255, 157, 50, 0.18);
+    --selected-row-bg: rgba(45, 31, 18, 0.98);
+    --focus-row-ring: rgba(255, 172, 73, 0.38);
+    --shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
+    --radius-lg: 6px;
+    --radius-md: 4px;
+    --radius-sm: 2px;
+    --radius-pill: 4px;
+    --table-radius: 0;
+    --panel-blur: 0px;
+    --font-display: "Barlow Condensed", "IBM Plex Sans", sans-serif;
+    --font-ui: "Barlow Condensed", "IBM Plex Sans", sans-serif;
+    --font-mono: "JetBrains Mono", "IBM Plex Mono", monospace;
+    --heading-letter-spacing: 0.03em;
+    --button-letter-spacing: 0.08em;
+    --button-text-transform: uppercase;
+}
+
+html[data-theme="tradingview-midnight"] {
+    --bg: #111827;
+    --bg-deep: #090f1c;
+    --bg-raised: #141d30;
+    --bg-panel: #182235;
+    --bg-panel-strong: #223049;
+    --bg-table-head: #1e2b42;
+    --bg-sheet-row: #101724;
+    --bg-sheet-row-alt: #19263a;
+    --border: rgba(102, 134, 188, 0.26);
+    --border-strong: rgba(113, 173, 255, 0.42);
+    --grid-line: rgba(91, 121, 171, 0.13);
+    --text: #e9f0fb;
+    --muted: #8ea5c7;
+    --accent: #4ea1ff;
+    --accent-soft: rgba(78, 161, 255, 0.18);
+    --accent-strong: #83c5ff;
+    --buy: #24c48e;
+    --buy-soft: rgba(36, 196, 142, 0.14);
+    --sell: #f46373;
+    --sell-soft: rgba(244, 99, 115, 0.14);
+    --bg-glow-a: rgba(78, 161, 255, 0.18);
+    --bg-glow-b: rgba(36, 196, 142, 0.08);
+    --surface-top-highlight: rgba(141, 176, 255, 0.06);
+    --surface-bottom-shade: rgba(4, 10, 18, 0.32);
+    --status-card-top-highlight: rgba(78, 161, 255, 0.08);
+    --status-card-bottom-shade: rgba(3, 7, 15, 0.26);
+    --table-wrap-highlight: rgba(78, 161, 255, 0.03);
+    --control-bg: rgba(10, 18, 31, 0.72);
+    --secondary-btn-bg: rgba(255, 255, 255, 0.05);
+    --pill-bg: rgba(255, 255, 255, 0.06);
+    --orders-row-bg: rgba(11, 18, 31, 0.96);
+    --row-hover-bg: rgba(29, 46, 73, 0.96);
+    --selected-row-accent: rgba(78, 161, 255, 0.2);
+    --selected-row-bg: rgba(21, 34, 53, 0.98);
+    --focus-row-ring: rgba(78, 161, 255, 0.42);
+    --shadow: 0 32px 78px rgba(3, 8, 20, 0.48);
+    --radius-lg: 22px;
+    --radius-md: 16px;
+    --radius-sm: 10px;
+    --radius-pill: 999px;
+    --table-radius: 16px;
+    --panel-blur: 12px;
+    --font-display: "Space Grotesk", "IBM Plex Sans", sans-serif;
+    --font-ui: "Sora", "IBM Plex Sans", sans-serif;
+    --font-mono: "JetBrains Mono", "IBM Plex Mono", monospace;
+    --button-letter-spacing: 0.02em;
+}
+
+html[data-theme="reuters-eikon"] {
+    --bg: #0f1622;
+    --bg-deep: #091019;
+    --bg-raised: #141f2c;
+    --bg-panel: #182433;
+    --bg-panel-strong: #213246;
+    --bg-table-head: #1d2d40;
+    --bg-sheet-row: #101823;
+    --bg-sheet-row-alt: #182535;
+    --border: rgba(98, 158, 190, 0.26);
+    --border-strong: rgba(91, 214, 232, 0.42);
+    --grid-line: rgba(91, 180, 201, 0.12);
+    --text: #e8f6fb;
+    --muted: #90aebb;
+    --accent: #37d0e8;
+    --accent-soft: rgba(55, 208, 232, 0.18);
+    --accent-strong: #8febf5;
+    --buy: #6cd38b;
+    --buy-soft: rgba(108, 211, 139, 0.14);
+    --sell: #ff8b57;
+    --sell-soft: rgba(255, 139, 87, 0.14);
+    --bg-glow-a: rgba(55, 208, 232, 0.16);
+    --bg-glow-b: rgba(255, 139, 87, 0.07);
+    --surface-top-highlight: rgba(108, 223, 238, 0.05);
+    --surface-bottom-shade: rgba(4, 10, 18, 0.28);
+    --status-card-top-highlight: rgba(55, 208, 232, 0.08);
+    --status-card-bottom-shade: rgba(0, 0, 0, 0.2);
+    --table-wrap-highlight: rgba(55, 208, 232, 0.03);
+    --control-bg: rgba(10, 18, 28, 0.74);
+    --secondary-btn-bg: rgba(255, 255, 255, 0.05);
+    --pill-bg: rgba(55, 208, 232, 0.08);
+    --orders-row-bg: rgba(12, 20, 30, 0.96);
+    --row-hover-bg: rgba(27, 46, 62, 0.96);
+    --selected-row-accent: rgba(55, 208, 232, 0.16);
+    --selected-row-bg: rgba(20, 34, 47, 0.98);
+    --focus-row-ring: rgba(55, 208, 232, 0.38);
+    --radius-lg: 14px;
+    --radius-md: 10px;
+    --radius-sm: 6px;
+    --radius-pill: 10px;
+    --table-radius: 12px;
+    --panel-blur: 10px;
+    --font-display: "Sora", "IBM Plex Sans", sans-serif;
+    --font-ui: "Exo 2", "IBM Plex Sans", sans-serif;
+    --font-mono: "JetBrains Mono", "IBM Plex Mono", monospace;
+    --button-letter-spacing: 0.02em;
+}
+
+html[data-theme="tws-mosaic"] {
+    --bg: #15171c;
+    --bg-deep: #0c0d11;
+    --bg-raised: #1c1f25;
+    --bg-panel: #20242b;
+    --bg-panel-strong: #2a3039;
+    --bg-table-head: #252b34;
+    --bg-sheet-row: #13161a;
+    --bg-sheet-row-alt: #1d2229;
+    --border: rgba(141, 154, 175, 0.24);
+    --border-strong: rgba(223, 188, 85, 0.4);
+    --grid-line: rgba(118, 130, 150, 0.12);
+    --text: #eef1f6;
+    --muted: #9ea8b8;
+    --accent: #e0b84f;
+    --accent-soft: rgba(224, 184, 79, 0.18);
+    --accent-strong: #f1d58b;
+    --buy: #6bcf8e;
+    --buy-soft: rgba(107, 207, 142, 0.14);
+    --sell: #f06f78;
+    --sell-soft: rgba(240, 111, 120, 0.14);
+    --bg-glow-a: rgba(224, 184, 79, 0.14);
+    --bg-glow-b: rgba(107, 207, 142, 0.06);
+    --surface-top-highlight: rgba(255, 255, 255, 0.02);
+    --surface-bottom-shade: rgba(0, 0, 0, 0.28);
+    --status-card-top-highlight: rgba(224, 184, 79, 0.06);
+    --status-card-bottom-shade: rgba(0, 0, 0, 0.18);
+    --table-wrap-highlight: rgba(224, 184, 79, 0.02);
+    --control-bg: rgba(19, 22, 27, 0.84);
+    --secondary-btn-bg: rgba(255, 255, 255, 0.045);
+    --pill-bg: rgba(255, 255, 255, 0.045);
+    --orders-row-bg: rgba(19, 22, 27, 0.97);
+    --row-hover-bg: rgba(44, 49, 57, 0.97);
+    --selected-row-accent: rgba(224, 184, 79, 0.14);
+    --selected-row-bg: rgba(33, 37, 44, 0.98);
+    --focus-row-ring: rgba(224, 184, 79, 0.34);
+    --shadow: 0 22px 54px rgba(3, 4, 7, 0.4);
+    --radius-lg: 8px;
+    --radius-md: 6px;
+    --radius-sm: 4px;
+    --radius-pill: 6px;
+    --table-radius: 4px;
+    --panel-blur: 4px;
+    --font-display: "Barlow Condensed", "IBM Plex Sans", sans-serif;
+    --font-ui: "IBM Plex Sans", "Aptos", sans-serif;
+    --font-mono: "IBM Plex Mono", "JetBrains Mono", monospace;
+    --heading-letter-spacing: 0.01em;
+    --button-letter-spacing: 0.06em;
+    --button-text-transform: uppercase;
+}
+
+html[data-theme="cqg-green"] {
+    --bg: #09120d;
+    --bg-deep: #040806;
+    --bg-raised: #0e1913;
+    --bg-panel: #122019;
+    --bg-panel-strong: #183026;
+    --bg-table-head: #183329;
+    --bg-sheet-row: #08110d;
+    --bg-sheet-row-alt: #112118;
+    --border: rgba(86, 150, 108, 0.26);
+    --border-strong: rgba(107, 214, 135, 0.42);
+    --grid-line: rgba(72, 152, 96, 0.13);
+    --text: #e4f7e9;
+    --muted: #8eb098;
+    --accent: #68d38b;
+    --accent-soft: rgba(104, 211, 139, 0.18);
+    --accent-strong: #b0efc2;
+    --buy: #89f0a6;
+    --buy-soft: rgba(137, 240, 166, 0.14);
+    --sell: #ff7b7b;
+    --sell-soft: rgba(255, 123, 123, 0.14);
+    --bg-glow-a: rgba(104, 211, 139, 0.16);
+    --bg-glow-b: rgba(76, 161, 101, 0.08);
+    --surface-top-highlight: rgba(114, 223, 144, 0.05);
+    --surface-bottom-shade: rgba(0, 0, 0, 0.34);
+    --status-card-top-highlight: rgba(104, 211, 139, 0.08);
+    --status-card-bottom-shade: rgba(0, 0, 0, 0.22);
+    --table-wrap-highlight: rgba(104, 211, 139, 0.03);
+    --control-bg: rgba(9, 18, 13, 0.86);
+    --secondary-btn-bg: rgba(104, 211, 139, 0.08);
+    --pill-bg: rgba(104, 211, 139, 0.09);
+    --orders-row-bg: rgba(9, 18, 13, 0.98);
+    --row-hover-bg: rgba(23, 46, 33, 0.98);
+    --selected-row-accent: rgba(104, 211, 139, 0.16);
+    --selected-row-bg: rgba(16, 33, 23, 0.98);
+    --focus-row-ring: rgba(104, 211, 139, 0.4);
+    --shadow: 0 22px 58px rgba(2, 6, 4, 0.42);
+    --radius-lg: 8px;
+    --radius-md: 6px;
+    --radius-sm: 3px;
+    --radius-pill: 3px;
+    --table-radius: 3px;
+    --panel-blur: 2px;
+    --font-display: "Rajdhani", "IBM Plex Sans", sans-serif;
+    --font-ui: "Rajdhani", "IBM Plex Sans", sans-serif;
+    --font-mono: "JetBrains Mono", "IBM Plex Mono", monospace;
+    --heading-letter-spacing: 0.04em;
+    --button-letter-spacing: 0.08em;
+    --button-text-transform: uppercase;
+}
+
+html[data-theme="sierra-chart"] {
+    --bg: #10151c;
+    --bg-deep: #080b10;
+    --bg-raised: #161d26;
+    --bg-panel: #1a222c;
+    --bg-panel-strong: #22303b;
+    --bg-table-head: #20313c;
+    --bg-sheet-row: #0f151d;
+    --bg-sheet-row-alt: #1a2732;
+    --border: rgba(103, 140, 167, 0.24);
+    --border-strong: rgba(78, 202, 201, 0.42);
+    --grid-line: rgba(82, 133, 160, 0.12);
+    --text: #edf5f9;
+    --muted: #94a9b6;
+    --accent: #43d0ca;
+    --accent-soft: rgba(67, 208, 202, 0.18);
+    --accent-strong: #8df2ec;
+    --buy: #73d88f;
+    --buy-soft: rgba(115, 216, 143, 0.14);
+    --sell: #ff8578;
+    --sell-soft: rgba(255, 133, 120, 0.14);
+    --bg-glow-a: rgba(67, 208, 202, 0.15);
+    --bg-glow-b: rgba(120, 162, 212, 0.08);
+    --surface-top-highlight: rgba(94, 221, 216, 0.05);
+    --surface-bottom-shade: rgba(5, 10, 17, 0.28);
+    --status-card-top-highlight: rgba(67, 208, 202, 0.07);
+    --status-card-bottom-shade: rgba(0, 0, 0, 0.2);
+    --table-wrap-highlight: rgba(67, 208, 202, 0.03);
+    --control-bg: rgba(11, 18, 24, 0.76);
+    --secondary-btn-bg: rgba(255, 255, 255, 0.05);
+    --pill-bg: rgba(67, 208, 202, 0.07);
+    --orders-row-bg: rgba(13, 21, 29, 0.97);
+    --row-hover-bg: rgba(27, 44, 58, 0.97);
+    --selected-row-accent: rgba(67, 208, 202, 0.16);
+    --selected-row-bg: rgba(20, 33, 44, 0.98);
+    --focus-row-ring: rgba(67, 208, 202, 0.36);
+    --radius-lg: 10px;
+    --radius-md: 8px;
+    --radius-sm: 4px;
+    --radius-pill: 8px;
+    --table-radius: 6px;
+    --panel-blur: 6px;
+    --font-display: "Exo 2", "IBM Plex Sans", sans-serif;
+    --font-ui: "IBM Plex Sans", "Aptos", sans-serif;
+    --font-mono: "JetBrains Mono", "IBM Plex Mono", monospace;
+    --button-letter-spacing: 0.03em;
+}
+
+html[data-theme="nasdaq-depth"] {
+    --bg: #0d1221;
+    --bg-deep: #060912;
+    --bg-raised: #121934;
+    --bg-panel: #151f3b;
+    --bg-panel-strong: #1c2950;
+    --bg-table-head: #1b2a55;
+    --bg-sheet-row: #0d1430;
+    --bg-sheet-row-alt: #142047;
+    --border: rgba(95, 121, 214, 0.26);
+    --border-strong: rgba(68, 143, 255, 0.44);
+    --grid-line: rgba(76, 110, 202, 0.14);
+    --text: #edf2ff;
+    --muted: #8d9ccc;
+    --accent: #4e90ff;
+    --accent-soft: rgba(78, 144, 255, 0.18);
+    --accent-strong: #93bcff;
+    --buy: #3fdf9b;
+    --buy-soft: rgba(63, 223, 155, 0.14);
+    --sell: #ff6f8f;
+    --sell-soft: rgba(255, 111, 143, 0.14);
+    --bg-glow-a: rgba(78, 144, 255, 0.18);
+    --bg-glow-b: rgba(63, 223, 155, 0.08);
+    --surface-top-highlight: rgba(122, 170, 255, 0.06);
+    --surface-bottom-shade: rgba(4, 8, 18, 0.34);
+    --status-card-top-highlight: rgba(78, 144, 255, 0.1);
+    --status-card-bottom-shade: rgba(6, 10, 20, 0.26);
+    --table-wrap-highlight: rgba(78, 144, 255, 0.04);
+    --control-bg: rgba(10, 16, 37, 0.74);
+    --secondary-btn-bg: rgba(255, 255, 255, 0.055);
+    --pill-bg: rgba(255, 255, 255, 0.055);
+    --orders-row-bg: rgba(10, 16, 38, 0.97);
+    --row-hover-bg: rgba(24, 38, 79, 0.97);
+    --selected-row-accent: rgba(78, 144, 255, 0.22);
+    --selected-row-bg: rgba(18, 28, 63, 0.98);
+    --focus-row-ring: rgba(78, 144, 255, 0.44);
+    --shadow: 0 32px 82px rgba(3, 7, 19, 0.5);
+    --radius-lg: 20px;
+    --radius-md: 14px;
+    --radius-sm: 8px;
+    --radius-pill: 999px;
+    --table-radius: 14px;
+    --panel-blur: 10px;
+    --font-display: "Space Grotesk", "IBM Plex Sans", sans-serif;
+    --font-ui: "Sora", "IBM Plex Sans", sans-serif;
+    --font-mono: "JetBrains Mono", "IBM Plex Mono", monospace;
+    --button-letter-spacing: 0.04em;
+}
+
+html[data-theme="ice-blue"] {
+    --bg: #0e1620;
+    --bg-deep: #070e16;
+    --bg-raised: #15202b;
+    --bg-panel: #192734;
+    --bg-panel-strong: #233747;
+    --bg-table-head: #223a4b;
+    --bg-sheet-row: #101922;
+    --bg-sheet-row-alt: #192734;
+    --border: rgba(126, 168, 191, 0.28);
+    --border-strong: rgba(146, 214, 235, 0.44);
+    --grid-line: rgba(125, 178, 203, 0.12);
+    --text: #eef8fc;
+    --muted: #97b4c2;
+    --accent: #88d5ea;
+    --accent-soft: rgba(136, 213, 234, 0.18);
+    --accent-strong: #c0eef7;
+    --buy: #6fe0bf;
+    --buy-soft: rgba(111, 224, 191, 0.14);
+    --sell: #ff8f9b;
+    --sell-soft: rgba(255, 143, 155, 0.14);
+    --bg-glow-a: rgba(136, 213, 234, 0.16);
+    --bg-glow-b: rgba(111, 224, 191, 0.08);
+    --surface-top-highlight: rgba(179, 231, 244, 0.06);
+    --surface-bottom-shade: rgba(3, 9, 14, 0.24);
+    --status-card-top-highlight: rgba(136, 213, 234, 0.08);
+    --status-card-bottom-shade: rgba(5, 10, 16, 0.18);
+    --table-wrap-highlight: rgba(136, 213, 234, 0.04);
+    --control-bg: rgba(12, 20, 29, 0.72);
+    --secondary-btn-bg: rgba(255, 255, 255, 0.06);
+    --pill-bg: rgba(255, 255, 255, 0.06);
+    --orders-row-bg: rgba(14, 24, 34, 0.95);
+    --row-hover-bg: rgba(29, 48, 64, 0.95);
+    --selected-row-accent: rgba(136, 213, 234, 0.18);
+    --selected-row-bg: rgba(21, 36, 49, 0.98);
+    --focus-row-ring: rgba(136, 213, 234, 0.4);
+    --shadow: 0 28px 76px rgba(4, 9, 14, 0.42);
+    --radius-lg: 24px;
+    --radius-md: 18px;
+    --radius-sm: 12px;
+    --radius-pill: 999px;
+    --table-radius: 18px;
+    --panel-blur: 12px;
+    --font-display: "Sora", "IBM Plex Sans", sans-serif;
+    --font-ui: "IBM Plex Sans", "Aptos", sans-serif;
+    --font-mono: "IBM Plex Mono", "JetBrains Mono", monospace;
+    --button-letter-spacing: 0.02em;
+}
+
+html[data-theme="midnight-mono"] {
+    --bg: #0a0a0b;
+    --bg-deep: #040404;
+    --bg-raised: #121214;
+    --bg-panel: #17181b;
+    --bg-panel-strong: #222328;
+    --bg-table-head: #212328;
+    --bg-sheet-row: #0c0d10;
+    --bg-sheet-row-alt: #17191d;
+    --border: rgba(134, 138, 146, 0.24);
+    --border-strong: rgba(223, 227, 235, 0.36);
+    --grid-line: rgba(123, 126, 132, 0.12);
+    --text: #f2f3f5;
+    --muted: #9ea4ad;
+    --accent: #d9dde5;
+    --accent-soft: rgba(217, 221, 229, 0.14);
+    --accent-strong: #f4f6f8;
+    --buy: #8fd4b1;
+    --buy-soft: rgba(143, 212, 177, 0.14);
+    --sell: #f09b9b;
+    --sell-soft: rgba(240, 155, 155, 0.14);
+    --bg-glow-a: rgba(217, 221, 229, 0.12);
+    --bg-glow-b: rgba(255, 255, 255, 0.04);
+    --page-noise-opacity: 0.28;
+    --surface-top-highlight: rgba(255, 255, 255, 0.025);
+    --surface-bottom-shade: rgba(0, 0, 0, 0.32);
+    --status-card-top-highlight: rgba(255, 255, 255, 0.04);
+    --status-card-bottom-shade: rgba(0, 0, 0, 0.22);
+    --table-wrap-highlight: rgba(255, 255, 255, 0.015);
+    --table-head-highlight: rgba(255, 255, 255, 0.015);
+    --control-bg: rgba(10, 10, 12, 0.86);
+    --secondary-btn-bg: rgba(255, 255, 255, 0.03);
+    --pill-bg: rgba(255, 255, 255, 0.03);
+    --orders-row-bg: rgba(10, 10, 12, 0.98);
+    --row-hover-bg: rgba(27, 27, 31, 0.98);
+    --selected-row-accent: rgba(217, 221, 229, 0.08);
+    --selected-row-bg: rgba(20, 21, 24, 0.98);
+    --focus-row-ring: rgba(217, 221, 229, 0.24);
+    --shadow: 0 20px 52px rgba(0, 0, 0, 0.46);
+    --radius-lg: 4px;
+    --radius-md: 3px;
+    --radius-sm: 2px;
+    --radius-pill: 3px;
+    --table-radius: 2px;
+    --panel-blur: 0px;
+    --font-display: "JetBrains Mono", "IBM Plex Mono", monospace;
+    --font-ui: "JetBrains Mono", "IBM Plex Mono", monospace;
+    --font-mono: "JetBrains Mono", "IBM Plex Mono", monospace;
+    --heading-letter-spacing: 0.03em;
+    --button-letter-spacing: 0.08em;
+    --button-text-transform: uppercase;
 }
 
 * {
@@ -38,9 +515,9 @@ body {
     margin: 0;
     min-height: 100vh;
     background:
-            radial-gradient(circle at top left, rgba(125, 185, 255, 0.1), transparent 30%),
-            radial-gradient(circle at top right, rgba(48, 204, 140, 0.06), transparent 22%),
-            linear-gradient(180deg, #161e28 0%, var(--bg) 32%, var(--bg-deep) 100%);
+            radial-gradient(circle at top left, var(--bg-glow-a), transparent 30%),
+            radial-gradient(circle at top right, var(--bg-glow-b), transparent 22%),
+            linear-gradient(180deg, var(--bg-panel-strong) 0%, var(--bg) 32%, var(--bg-deep) 100%);
     color: var(--text);
     font-family: var(--font-ui);
     line-height: 1.35;
@@ -59,13 +536,13 @@ body {
             linear-gradient(rgba(255, 255, 255, 0.012) 1px, transparent 1px),
             linear-gradient(90deg, rgba(255, 255, 255, 0.012) 1px, transparent 1px);
     background-size: 28px 28px;
-    opacity: 0.38;
+    opacity: var(--page-noise-opacity);
 }
 
 .scanline {
-    background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.02), transparent);
+    background: linear-gradient(to bottom, transparent, var(--scanline-color), transparent);
     animation: scan 12s linear infinite;
-    opacity: 0.2;
+    opacity: var(--scanline-opacity);
 }
 
 .workstation {
@@ -81,29 +558,40 @@ body {
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     background:
-            linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 16%),
-            linear-gradient(180deg, rgba(7, 11, 17, 0.2), transparent 100%),
+            linear-gradient(180deg, var(--surface-top-highlight), transparent 16%),
+            linear-gradient(180deg, var(--surface-bottom-shade), transparent 100%),
             var(--bg-panel);
     box-shadow: var(--shadow);
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(var(--panel-blur));
 }
 
 .topbar {
-    display: flex;
-    justify-content: space-between;
-    gap: 18px;
-    padding: 18px 20px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 18px 24px;
+    padding: 14px 18px;
     margin-bottom: 16px;
     animation: rise 360ms ease;
 }
 
 .brand-block {
     min-width: 0;
+    flex: 1 1 auto;
+    display: grid;
+    gap: 6px;
+}
+
+.brand-head {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
 }
 
 .brand-kicker,
 .panel-kicker {
     margin: 0 0 6px;
+    font-family: var(--font-display);
     color: var(--muted);
     font-size: 0.72rem;
     text-transform: uppercase;
@@ -113,7 +601,8 @@ body {
 h1,
 h2 {
     margin: 0;
-    letter-spacing: -0.03em;
+    font-family: var(--font-display);
+    letter-spacing: var(--heading-letter-spacing);
 }
 
 h1 {
@@ -133,38 +622,121 @@ h2 {
     color: var(--muted);
 }
 
-.topbar-metrics {
+.brand-copy {
+    margin-top: 2px;
+    max-width: 720px;
+    font-size: 0.9rem;
+}
+
+.topbar-utility {
     display: grid;
-    grid-template-columns: repeat(6, minmax(100px, 1fr));
     gap: 10px;
-    width: min(880px, 100%);
+    align-content: start;
+    justify-items: end;
 }
 
-.metric-card {
+.topbar-status {
     display: grid;
-    gap: 6px;
-    padding: 12px 14px;
+    grid-template-columns: repeat(3, minmax(130px, auto));
+    gap: 10px 14px;
+    justify-content: end;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    border: 1px solid rgba(134, 154, 178, 0.2);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(0, 0, 0, 0.08));
+    background: linear-gradient(180deg, var(--status-card-top-highlight), var(--status-card-bottom-shade));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
-.metric-card span,
+.topbar-heading {
+    display: grid;
+    gap: 4px;
+    min-width: 118px;
+    text-align: left;
+}
+
+.topbar-label,
 label span,
 .quote-strip span,
 .ticket-summary span {
-    font-size: 0.7rem;
+    font-family: var(--font-display);
+    font-size: 0.64rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--muted);
 }
 
-.metric-card strong,
+.topbar-value,
 .ticket-summary strong,
 .quote-strip strong {
-    font-family: var(--font-ui);
+    font-family: var(--font-display);
     font-variant-numeric: tabular-nums;
-    font-size: 1rem;
+    font-size: clamp(1.02rem, 1.2vw, 1.24rem);
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+    white-space: nowrap;
+}
+
+.topbar-link {
+    min-height: unset;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--text);
+    text-align: left;
+    justify-self: start;
+}
+
+.topbar-link .topbar-value {
+    color: var(--accent);
+}
+
+.topbar-link:hover {
+    transform: none;
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 0.14em;
+}
+
+.topbar-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    width: 100%;
+    margin-top: 3px;
+}
+
+.theme-picker {
+    display: grid;
+    gap: 4px;
+    min-width: 190px;
+}
+
+.theme-picker span {
+    font-size: 0.58rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.theme-select {
+    min-height: 30px;
+    min-width: 190px;
+    padding: 0 10px;
+    font-size: 0.76rem;
+    background: var(--control-bg);
+}
+
+.logout-form {
+    margin: 0;
+}
+
+.compact-btn {
+    min-height: 30px;
+    padding: 0 10px;
+    font-size: 0.74rem;
     font-weight: 600;
 }
 
@@ -210,7 +782,6 @@ label span,
 
 .mode-pill,
 .tag,
-.status-badge,
 .status-pill {
     display: inline-flex;
     align-items: center;
@@ -218,7 +789,7 @@ label span,
     gap: 8px;
     min-height: 30px;
     padding: 0 12px;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     border: 1px solid var(--border-strong);
     font-size: 0.78rem;
     font-weight: 600;
@@ -227,19 +798,15 @@ label span,
 .mode-pill,
 .tag,
 .status-pill {
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--pill-bg);
 }
 
-.status-badge.connected {
+.topbar-connection.connected {
     color: var(--buy);
-    border-color: rgba(48, 204, 140, 0.5);
-    background: var(--buy-soft);
 }
 
-.status-badge.disconnected {
+.topbar-connection.disconnected {
     color: var(--sell);
-    border-color: rgba(255, 133, 133, 0.48);
-    background: var(--sell-soft);
 }
 
 label {
@@ -259,7 +826,7 @@ select {
     min-height: 42px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);
-    background: rgba(8, 13, 20, 0.52);
+    background: var(--control-bg);
     color: var(--text);
     padding: 10px 12px;
     font-family: var(--font-ui);
@@ -279,6 +846,8 @@ button {
     border: 1px solid transparent;
     border-radius: var(--radius-sm);
     cursor: pointer;
+    letter-spacing: var(--button-letter-spacing);
+    text-transform: var(--button-text-transform);
     transition: transform 150ms ease, border-color 150ms ease, background 150ms ease, color 150ms ease;
 }
 
@@ -287,6 +856,7 @@ button:hover {
 }
 
 .ticket-btn:hover,
+.order-action-btn:hover,
 .icon-btn:hover,
 .cancel-btn:hover,
 .dialog-close:hover {
@@ -303,25 +873,26 @@ button:disabled {
 .secondary-btn {
     min-height: 42px;
     padding: 0 16px;
+    font-family: var(--font-display);
     font-weight: 700;
 }
 
 .primary-btn {
     color: #071018;
-    background: linear-gradient(135deg, var(--accent), #a0d6ff);
+    background: linear-gradient(135deg, var(--accent), var(--accent-strong));
 }
 
 .secondary-btn {
     color: var(--text);
     border-color: var(--border);
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--secondary-btn-bg);
 }
 
 .table-wrap {
     overflow: auto;
     border: 1px solid var(--border);
-    border-radius: 10px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent), var(--bg-raised);
+    border-radius: var(--table-radius);
+    background: linear-gradient(180deg, var(--table-wrap-highlight), transparent), var(--bg-raised);
 }
 
 .watchlist-wrap {
@@ -361,13 +932,14 @@ button:disabled {
     z-index: 1;
     padding: 10px 9px;
     text-align: left;
+    font-family: var(--font-display);
     font-size: 0.69rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: #b9c7d8;
     border-bottom: 1px solid rgba(153, 176, 204, 0.18);
     border-right: 1px solid var(--grid-line);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent), var(--bg-table-head);
+    background: linear-gradient(180deg, var(--table-head-highlight), transparent), var(--bg-table-head);
 }
 
 .workstation-table thead th:last-child,
@@ -398,7 +970,7 @@ button:disabled {
 }
 
 .orders-table tbody td {
-    background: rgba(18, 24, 32, 0.96);
+    background: var(--orders-row-bg);
 }
 
 .workstation-table tbody tr {
@@ -406,18 +978,18 @@ button:disabled {
 }
 
 .workstation-table tbody tr:hover td {
-    background: rgba(38, 56, 77, 0.94);
+    background: var(--row-hover-bg);
 }
 
 .watchlist-table tbody tr.selected td,
 .picker-table tbody tr.selected td {
     background:
-            linear-gradient(90deg, rgba(125, 185, 255, 0.12), transparent 55%),
-            rgba(31, 43, 57, 0.98);
+            linear-gradient(90deg, var(--selected-row-accent), transparent 55%),
+            var(--selected-row-bg);
 }
 
 .picker-table tbody tr.focused td {
-    box-shadow: inset 0 0 0 1px rgba(125, 185, 255, 0.28);
+    box-shadow: inset 0 0 0 1px var(--focus-row-ring);
 }
 
 .row-index-head,
@@ -554,6 +1126,14 @@ button:disabled {
 
 .compact-actions {
     justify-content: flex-start;
+}
+
+.order-action-btn {
+    min-height: 34px;
+    min-width: 72px;
+    padding: 0 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
 }
 
 .ticket-btn,
@@ -724,6 +1304,13 @@ button:disabled {
     min-height: 46px;
 }
 
+.form-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
 .ticket-note {
     font-size: 0.82rem;
 }
@@ -817,6 +1404,10 @@ button:disabled {
     width: min(560px, calc(100vw - 32px));
 }
 
+.latency-dialog-panel {
+    width: min(680px, calc(100vw - 32px));
+}
+
 #catalogDialog .workstation-table {
     font-size: 1rem;
 }
@@ -827,6 +1418,27 @@ button:disabled {
 
 #catalogDialog .picker-wrap {
     max-height: min(40vh, 360px);
+}
+
+#latencyDialog .picker-wrap {
+    max-height: min(42vh, 360px);
+}
+
+#latencyDialog .workstation-table {
+    font-size: 0.96rem;
+}
+
+#latencyDialog .workstation-table thead th {
+    padding: 10px 6px;
+    font-size: 0.73rem;
+}
+
+#latencyDialog .workstation-table thead th:first-child {
+    text-align: right;
+}
+
+#latencyDialog .workstation-table tbody td {
+    padding: 7px 6px;
 }
 
 .catalog-drilldown-head {
@@ -849,6 +1461,12 @@ button:disabled {
     border-right: 1px solid var(--border-strong) !important;
 }
 
+.latency-exchange-cell {
+    font-family: var(--font-ui);
+    font-weight: 600;
+    text-align: right;
+}
+
 .catalog-exchange-cell:hover {
     color: var(--accent);
 }
@@ -862,21 +1480,125 @@ button:disabled {
     background: var(--accent-soft) !important;
 }
 
+.broker-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.broker-wide {
+    grid-column: 1 / -1;
+}
+
+.profiles-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+    gap: 16px;
+}
+
+.profile-form {
+    display: grid;
+    gap: 12px;
+    align-content: start;
+    padding: 2px 0;
+}
+
+.profile-headline {
+    display: grid;
+    gap: 4px;
+}
+
+.profile-headline strong {
+    font-size: 1rem;
+}
+
+.profile-headline span {
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
+.profile-field-grid {
+    display: grid;
+    gap: 12px;
+}
+
+.login-body {
+    overflow: hidden;
+}
+
+.login-shell {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    position: relative;
+    z-index: 1;
+}
+
+.login-card {
+    width: min(460px, calc(100vw - 24px));
+    padding: 24px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background:
+            linear-gradient(180deg, var(--surface-top-highlight), transparent 18%),
+            linear-gradient(180deg, var(--surface-bottom-shade), transparent 100%),
+            var(--bg-panel);
+    box-shadow: var(--shadow);
+}
+
+.login-form {
+    display: grid;
+    gap: 12px;
+    margin-top: 18px;
+}
+
+.login-message {
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid rgba(255, 133, 133, 0.35);
+    background: rgba(255, 133, 133, 0.1);
+    color: var(--text);
+}
+
 .toast {
     position: fixed;
     right: 18px;
     bottom: 18px;
     max-width: min(360px, calc(100vw - 36px));
     padding: 12px 14px;
-    border-radius: 12px;
+    border-radius: var(--radius-md);
     border: 1px solid rgba(125, 185, 255, 0.35);
-    background: rgba(12, 18, 27, 0.95);
+    background: var(--bg-panel-strong);
     color: var(--text);
     box-shadow: var(--shadow);
     transform: translateY(0);
     opacity: 1;
     transition: opacity 180ms ease, transform 180ms ease;
     z-index: 14;
+}
+
+html[data-theme="bloomberg-inspired"] .topbar,
+html[data-theme="bloomberg-inspired"] .panel,
+html[data-theme="bloomberg-inspired"] .instrument-dialog-panel,
+html[data-theme="bloomberg-inspired"] .login-card {
+    box-shadow: none;
+}
+
+html[data-theme="bloomberg-inspired"] .topbar-status,
+html[data-theme="bloomberg-inspired"] .table-wrap {
+    box-shadow: none;
+}
+
+html[data-theme="midnight-mono"] .page-noise {
+    background-size: 22px 22px;
+}
+
+html[data-theme="midnight-mono"] .brand-copy,
+html[data-theme="midnight-mono"] .panel-head p,
+html[data-theme="midnight-mono"] .ticket-note {
+    letter-spacing: 0.01em;
 }
 
 .hidden {
@@ -905,12 +1627,25 @@ button:disabled {
 
 @media (max-width: 1280px) {
     .topbar {
-        flex-direction: column;
+        grid-template-columns: 1fr;
     }
 
-    .topbar-metrics {
+    .topbar-utility,
+    .topbar-status {
         width: 100%;
-        grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+
+    .topbar-utility {
+        justify-items: start;
+    }
+
+    .topbar-status {
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        justify-content: stretch;
+    }
+
+    .topbar-actions {
+        justify-content: flex-start;
     }
 }
 
@@ -926,6 +1661,11 @@ button:disabled {
     .watchlist-wrap {
         max-height: none;
     }
+
+    .broker-grid,
+    .profiles-layout {
+        grid-template-columns: 1fr;
+    }
 }
 
 @media (max-width: 820px) {
@@ -937,14 +1677,31 @@ button:disabled {
         padding: 16px;
     }
 
-    .topbar-metrics {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+    .brand-head {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .topbar-status {
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     }
 
     .order-form,
     .quote-strip,
     .ticket-summary {
         grid-template-columns: 1fr;
+    }
+
+    .form-actions,
+    .topbar-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .theme-picker,
+    .theme-select {
+        width: 100%;
+        min-width: 0;
     }
 
     .workstation-table {
@@ -970,10 +1727,16 @@ button:disabled {
 
     .panel-head,
     .instrument-dialog-head,
+    .brand-head,
     .ticket-symbols,
     .instrument-dialog-actions {
         flex-direction: column;
         align-items: flex-start;
+    }
+
+    .topbar-status {
+        width: 100%;
+        grid-template-columns: 1fr;
     }
 
     .action-cluster {

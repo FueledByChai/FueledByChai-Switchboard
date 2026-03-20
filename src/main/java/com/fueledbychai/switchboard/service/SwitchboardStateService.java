@@ -10,6 +10,7 @@ import com.fueledbychai.switchboard.api.OrderTicketRequest;
 import com.fueledbychai.switchboard.api.PairSnapshot;
 import com.fueledbychai.switchboard.api.PairSubscriptionRequest;
 import com.fueledbychai.switchboard.api.PriceHistoryPoint;
+import com.fueledbychai.switchboard.api.QuoteLatencySnapshot;
 import com.fueledbychai.switchboard.config.SwitchboardProperties;
 import com.fueledbychai.switchboard.model.OrderSide;
 import com.fueledbychai.switchboard.model.OrderStatus;
@@ -62,21 +63,24 @@ public class SwitchboardStateService {
     private static final BigDecimal BPS_MULTIPLIER = BigDecimal.valueOf(10_000);
     private static final BigDecimal APR_TO_BPS_PER_HOUR = BigDecimal.valueOf(100).divide(BigDecimal.valueOf(24L * 365L), MC);
     private static final BigDecimal BPS_PER_HOUR_TO_APR = BigDecimal.valueOf(24L * 365L).divide(BigDecimal.valueOf(100), MC);
-    private static final String PAPER_ORDER_NOTE = "Paper order only. Live exchange execution is not wired in this repo yet.";
     private static final List<String> LOOKUP_QUOTES = List.of("USDC", "USDT");
 
     private final SwitchboardProperties properties;
     private final MarketDataCatalogService marketDataCatalogService;
+    private final LiveBrokerService liveBrokerService;
     private final Clock clock = Clock.systemUTC();
     private final ConcurrentMap<String, MarketSubscriptionContext> marketsById = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, PairDefinition> pairsById = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, OrderDefinition> ordersById = new ConcurrentHashMap<>();
     private final ConcurrentMap<Exchange, QuoteEngine> enginesByExchange = new ConcurrentHashMap<>();
+    private final QuoteLatencyTracker quoteLatencyTracker = new QuoteLatencyTracker();
 
     public SwitchboardStateService(SwitchboardProperties properties,
-                                 MarketDataCatalogService marketDataCatalogService) {
+                                   MarketDataCatalogService marketDataCatalogService,
+                                   LiveBrokerService liveBrokerService) {
         this.properties = properties;
         this.marketDataCatalogService = marketDataCatalogService;
+        this.liveBrokerService = liveBrokerService;
     }
 
     public int maxRows() {
@@ -113,6 +117,7 @@ public class SwitchboardStateService {
                 assetType,
                 ticker,
                 engine,
+                quoteLatencyTracker,
                 Instant.now(clock),
                 Duration.ofMinutes(properties.getHistoryMinutes())
         );
@@ -190,36 +195,34 @@ public class SwitchboardStateService {
             throw new IllegalArgumentException("Post Only is not valid for market orders.");
         }
 
-        BigDecimal referencePrice = firstNonNull(referencePrice(market, side), limitPrice);
-        Instant now = Instant.now(clock);
-        String orderId = UUID.randomUUID().toString();
-
-        OrderDefinition order = new OrderDefinition(
-                orderId,
+        return liveBrokerService.placeOrder(
                 market.marketId,
                 market.commonSymbol,
                 market.exchangeSymbol,
                 market.exchange,
                 market.assetType,
-                side,
-                orderType,
-                timeInForce,
-                quantity,
-                limitPrice,
-                referencePrice,
-                PAPER_ORDER_NOTE,
-                now
+                market.ticker,
+                request
         );
-        ordersById.put(orderId, order);
-        return order.toSnapshot();
     }
 
     public void cancelOrder(String orderId) {
         if (orderId == null || orderId.isBlank()) {
             return;
         }
-        Optional.ofNullable(ordersById.get(orderId))
-                .ifPresent(order -> order.cancel(Instant.now(clock)));
+        liveBrokerService.cancelOrder(orderId);
+    }
+
+    public void cancelOrderByClientOrderId(String exchangeName, String clientOrderId) {
+        if (exchangeName == null || exchangeName.isBlank() || clientOrderId == null || clientOrderId.isBlank()) {
+            return;
+        }
+        liveBrokerService.cancelOrderByClientOrderId(exchangeName, clientOrderId);
+    }
+
+    public OrderSnapshot modifyOrder(String orderId, com.fueledbychai.switchboard.api.OrderModifyRequest request) {
+        Objects.requireNonNull(request, "request is required");
+        return liveBrokerService.modifyOrder(orderId, request);
     }
 
     public List<MarketSnapshot> marketSnapshots() {
@@ -265,25 +268,40 @@ public class SwitchboardStateService {
     }
 
     public List<OrderSnapshot> orderSnapshots() {
-        return ordersById.values().stream()
-                .sorted(Comparator.comparing((OrderDefinition order) -> order.createdAt).reversed())
-                .map(OrderDefinition::toSnapshot)
-                .toList();
+        return liveBrokerService.orderSnapshots();
+    }
+
+    public List<QuoteLatencySnapshot> quoteLatencySnapshots() {
+        return quoteLatencyTracker.snapshots();
     }
 
     public SwitchboardSnapshot fullSnapshot() {
         List<MarketSnapshot> markets = marketSnapshots();
         List<PairSnapshot> pairs = pairSnapshots();
+        List<QuoteLatencySnapshot> quoteLatencies = quoteLatencySnapshots();
         List<OrderSnapshot> orders = orderSnapshots();
+        List<com.fueledbychai.switchboard.api.BrokerConnectionSnapshot> brokerConnections = liveBrokerService.connectionSnapshots();
+        List<com.fueledbychai.switchboard.api.BalanceSnapshot> balances = liveBrokerService.balanceSnapshots();
+        List<com.fueledbychai.switchboard.api.PositionSnapshot> positions = liveBrokerService.positionSnapshots();
+        List<com.fueledbychai.switchboard.api.FillSnapshot> fills = liveBrokerService.fillSnapshots();
         Map<String, List<PriceHistoryPoint>> history = new LinkedHashMap<>();
         for (MarketSubscriptionContext context : marketsById.values()) {
             history.put(context.marketId, context.historySnapshot());
         }
-        return new SwitchboardSnapshot(Instant.now(clock), markets, pairs, orders, history);
+        return new SwitchboardSnapshot(Instant.now(clock), markets, pairs, quoteLatencies, orders, brokerConnections, balances, positions, fills, history);
     }
 
     public LiveSwitchboardSnapshot liveSnapshot() {
-        return new LiveSwitchboardSnapshot(Instant.now(clock), marketSnapshots(), pairSnapshots(), orderSnapshots());
+        return new LiveSwitchboardSnapshot(
+                Instant.now(clock),
+                marketSnapshots(),
+                pairSnapshots(),
+                quoteLatencySnapshots(),
+                orderSnapshots(),
+                liveBrokerService.connectionSnapshots(),
+                liveBrokerService.balanceSnapshots(),
+                liveBrokerService.positionSnapshots(),
+                liveBrokerService.fillSnapshots());
     }
 
     public List<PriceHistoryPoint> history(String marketId) {
@@ -730,6 +748,14 @@ public class SwitchboardStateService {
         return firstNonNull(market.bid, firstNonNull(market.last, midpoint(market.bid, market.ask)));
     }
 
+    static boolean shouldTrackQuoteLatency(ILevel1Quote quote) {
+        return hasQuoteValue(quote, QuoteType.BID) || hasQuoteValue(quote, QuoteType.ASK);
+    }
+
+    private static boolean hasQuoteValue(ILevel1Quote quote, QuoteType quoteType) {
+        return quote != null && quote.containsType(quoteType) && quote.getValue(quoteType) != null;
+    }
+
     private static final class PairDefinition {
         private final String pairId;
         private final String leftMarketId;
@@ -811,19 +837,26 @@ public class SwitchboardStateService {
                     marketId,
                     symbol,
                     exchange.name(),
+                    exchange.name(),
                     exchangeSymbol,
                     assetType.name(),
                     side.name(),
                     orderType.name(),
                     timeInForce.name(),
+                    orderId,
+                    null,
+                    quantity,
+                    BigDecimal.ZERO,
                     quantity,
                     limitPrice,
-                    referencePrice,
+                    null,
                     status.name(),
+                    null,
                     note,
                     createdAt,
                     updatedAt,
-                    canceledAt
+                    canceledAt,
+                    null
             );
         }
     }
@@ -837,6 +870,7 @@ public class SwitchboardStateService {
         private final SupportedAssetType assetType;
         private final Ticker ticker;
         private final QuoteEngine engine;
+        private final QuoteLatencyTracker quoteLatencyTracker;
         private final Instant createdAt;
         private final Duration historyRetention;
         private final ConcurrentLinkedDeque<PriceHistoryPoint> history = new ConcurrentLinkedDeque<>();
@@ -858,6 +892,7 @@ public class SwitchboardStateService {
                                           SupportedAssetType assetType,
                                           Ticker ticker,
                                           QuoteEngine engine,
+                                          QuoteLatencyTracker quoteLatencyTracker,
                                           Instant createdAt,
                                           Duration historyRetention) {
             this.marketId = marketId;
@@ -868,11 +903,17 @@ public class SwitchboardStateService {
             this.assetType = assetType;
             this.ticker = ticker;
             this.engine = engine;
+            this.quoteLatencyTracker = quoteLatencyTracker;
             this.createdAt = createdAt;
             this.historyRetention = historyRetention;
         }
 
         private synchronized void applyQuote(ILevel1Quote quote, Instant now) {
+            if (shouldTrackQuoteLatency(quote)) {
+                quoteLatencyTracker.record(exchange.name(), exchange.displayName(),
+                        Optional.ofNullable(quote.getTimeStamp()).map(ZonedDateTime::toInstant).orElse(null),
+                        now);
+            }
             bid = quoteValue(quote, QuoteType.BID, bid);
             ask = quoteValue(quote, QuoteType.ASK, ask);
             last = quoteValue(quote, QuoteType.LAST, last);

@@ -10,4 +10,9 @@ public class SwitchboardPageController {
     public String switchboard() {
         return "switchboard";
     }
+
+    @GetMapping("/login")
+    public String login() {
+        return "login";
+    }
 }

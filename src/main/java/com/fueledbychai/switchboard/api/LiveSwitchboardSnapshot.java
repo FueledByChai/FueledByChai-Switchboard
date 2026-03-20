@@ -7,6 +7,11 @@ public record LiveSwitchboardSnapshot(
         Instant serverTime,
         List<MarketSnapshot> markets,
         List<PairSnapshot> pairs,
-        List<OrderSnapshot> orders
+        List<QuoteLatencySnapshot> quoteLatencies,
+        List<OrderSnapshot> orders,
+        List<BrokerConnectionSnapshot> brokerConnections,
+        List<BalanceSnapshot> balances,
+        List<PositionSnapshot> positions,
+        List<FillSnapshot> fills
 ) {
 }

@@ -11,6 +11,7 @@ public record OrderTicketRequest(
         @NotBlank String side,
         @NotBlank String orderType,
         @NotBlank String timeInForce,
+        String clientOrderId,
         @NotNull @Positive BigDecimal quantity,
         @Positive BigDecimal limitPrice
 ) {

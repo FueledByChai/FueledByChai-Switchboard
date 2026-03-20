@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Switchboard Login</title>
+    <script>
+        (function () {
+            try {
+                document.documentElement.dataset.theme = localStorage.getItem("switchboard.theme") || "switchboard-dark";
+            } catch (error) {
+                document.documentElement.dataset.theme = "switchboard-dark";
+            }
+        }());
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Exo+2:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&family=Rajdhani:wght@500;600;700&family=Sora:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap">
+    <link rel="stylesheet" th:href="@{/css/switchboard.css}" href="/css/switchboard.css">
+</head>
+<body class="login-body">
+<div class="page-noise"></div>
+<div class="scanline"></div>
+
+<main class="login-shell">
+    <section class="login-card">
+        <p class="brand-kicker">FueledByChai</p>
+        <h1>Switchboard</h1>
+        <p class="brand-copy">Authenticate to access live broker connections, encrypted exchange profiles, and trading controls.</p>
+
+        <form th:action="@{/login}" method="post" class="login-form">
+            <label>
+                <span>Username</span>
+                <input type="text" name="username" autocomplete="username" required autofocus>
+            </label>
+            <label>
+                <span>Password</span>
+                <input type="password" name="password" autocomplete="current-password" required>
+            </label>
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+
+            <div class="login-message" th:if="${param.error}">
+                Invalid username or password.
+            </div>
+            <div class="login-message" th:if="${param.logout}">
+                You have been signed out.
+            </div>
+
+            <button type="submit" class="primary-btn">Sign In</button>
+        </form>
+    </section>
+</main>
+</body>
+</html>

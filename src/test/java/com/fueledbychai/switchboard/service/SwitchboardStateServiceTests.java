@@ -6,20 +6,29 @@ import com.fueledbychai.switchboard.model.SupportedExchange;
 import com.fueledbychai.data.Exchange;
 import com.fueledbychai.data.InstrumentType;
 import com.fueledbychai.data.Ticker;
+import com.fueledbychai.marketdata.Level1Quote;
+import com.fueledbychai.marketdata.QuoteType;
 import com.fueledbychai.util.ITickerRegistry;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
+import java.time.ZonedDateTime;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
 
 class SwitchboardStateServiceTests {
 
     @Test
     void lookupExtendsExchangeAssetTypesUsingRegistryContents() {
-        SwitchboardStateService service = new SwitchboardStateService(new SwitchboardProperties(), mock(MarketDataCatalogService.class));
+        SwitchboardStateService service = new SwitchboardStateService(
+                new SwitchboardProperties(),
+                new MarketDataCatalogService(List.of()),
+                null
+        );
         SupportedAssetType perp = SupportedAssetType.fromInstrumentType(InstrumentType.PERPETUAL_FUTURES);
         SupportedAssetType spot = SupportedAssetType.fromInstrumentType(InstrumentType.CRYPTO_SPOT);
         SupportedExchange exchange = new SupportedExchange("PARADEX", "Paradex", Exchange.PARADEX, List.of(perp));
@@ -35,6 +44,14 @@ class SwitchboardStateServiceTests {
         assertTrue(assetTypes.contains(spot));
     }
 
+    @Test
+    void quoteLatencyTracksOnlyTopOfBookUpdates() {
+        assertTrue(SwitchboardStateService.shouldTrackQuoteLatency(quote(Map.of(QuoteType.BID, BigDecimal.ONE))));
+        assertTrue(SwitchboardStateService.shouldTrackQuoteLatency(quote(Map.of(QuoteType.ASK, BigDecimal.TEN))));
+        assertFalse(SwitchboardStateService.shouldTrackQuoteLatency(quote(Map.of(QuoteType.VOLUME, BigDecimal.TEN))));
+        assertFalse(SwitchboardStateService.shouldTrackQuoteLatency(quote(Map.of(QuoteType.FUNDING_RATE_APR, new BigDecimal("0.12")))));
+    }
+
     private static Ticker[] tickersForType(InstrumentType instrumentType, String... symbols) {
         Ticker[] tickers = new Ticker[symbols.length];
         for (int index = 0; index < symbols.length; index++) {
@@ -44,6 +61,17 @@ class SwitchboardStateServiceTests {
                     .setInstrumentType(instrumentType);
         }
         return tickers;
+    }
+
+    private static Level1Quote quote(Map<QuoteType, BigDecimal> quoteValues) {
+        return new Level1Quote(
+                new Ticker()
+                        .setSymbol("ETH-PERP")
+                        .setExchange(Exchange.PARADEX)
+                        .setInstrumentType(InstrumentType.PERPETUAL_FUTURES),
+                ZonedDateTime.parse("2026-03-19T17:00:00Z"),
+                quoteValues
+        );
     }
 
     private static final class StubTickerRegistry implements ITickerRegistry {

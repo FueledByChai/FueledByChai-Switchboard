@@ -1,12 +1,13 @@
 package com.fueledbychai.switchboard;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+
 class FueledByChaiSwitchboardApplicationTests {
 
     @Test
-    void contextLoads() {
+    void applicationClassCanBeConstructed() {
+        assertDoesNotThrow(FueledByChaiSwitchboardApplication::new);
     }
 }

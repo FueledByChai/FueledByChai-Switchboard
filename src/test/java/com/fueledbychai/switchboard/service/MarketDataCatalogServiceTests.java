@@ -2,6 +2,7 @@ package com.fueledbychai.switchboard.service;
 
 import com.fueledbychai.switchboard.model.SupportedAssetType;
 import com.fueledbychai.switchboard.model.SupportedExchange;
+import com.fueledbychai.data.Exchange;
 import com.fueledbychai.data.InstrumentType;
 import org.junit.jupiter.api.Test;
 
@@ -15,7 +16,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MarketDataCatalogServiceTests {
 
-    private final MarketDataCatalogService catalog = new MarketDataCatalogService();
+    private final SupportedAssetType perp = SupportedAssetType.fromInstrumentType(InstrumentType.PERPETUAL_FUTURES);
+    private final SupportedAssetType spot = SupportedAssetType.fromInstrumentType(InstrumentType.CRYPTO_SPOT);
+    private final MarketDataCatalogService catalog = new MarketDataCatalogService(List.of(
+            new SupportedExchange("LIGHTER", "Lighter", Exchange.LIGHTER, List.of(perp, spot)),
+            new SupportedExchange("HYPERLIQUID", "Hyperliquid", Exchange.HYPERLIQUID, List.of(perp)),
+            new SupportedExchange("PARADEX", "Paradex", Exchange.PARADEX, List.of(perp, spot)),
+            new SupportedExchange("BINANCE_SPOT", "Binance Spot", Exchange.BINANCE_SPOT, List.of(spot))
+    ));
 
     @Test
     void discoversMarketDataExchangesFromClasspathProviders() {
@@ -24,9 +32,6 @@ class MarketDataCatalogServiceTests {
                 .collect(Collectors.toSet());
 
         assertTrue(exchangeNames.containsAll(List.of("LIGHTER", "HYPERLIQUID", "PARADEX", "BINANCE_SPOT")));
-
-        SupportedAssetType perp = SupportedAssetType.fromInstrumentType(InstrumentType.PERPETUAL_FUTURES);
-        SupportedAssetType spot = SupportedAssetType.fromInstrumentType(InstrumentType.CRYPTO_SPOT);
 
         assertTrue(findExchange("LIGHTER").supports(perp));
         assertTrue(findExchange("LIGHTER").supports(spot));

@@ -4,9 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Switchboard</title>
+    <meta name="_csrf" th:content="${_csrf.token}">
+    <meta name="_csrf_header" th:content="${_csrf.headerName}">
+    <script>
+        (function () {
+            try {
+                document.documentElement.dataset.theme = localStorage.getItem("switchboard.theme") || "switchboard-dark";
+            } catch (error) {
+                document.documentElement.dataset.theme = "switchboard-dark";
+            }
+        }());
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Exo+2:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&family=Rajdhani:wght@500;600;700&family=Sora:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" th:href="@{/css/switchboard.css}" href="/css/switchboard.css">
 </head>
 <body>
@@ -16,36 +27,43 @@
 <main class="workstation">
     <header class="topbar">
         <div class="brand-block">
-            <p class="brand-kicker">FueledByChai</p>
-            <h1>Switchboard</h1>
+            <div class="brand-head">
+                <div>
+                    <p class="brand-kicker">FueledByChai</p>
+                    <h1>Switchboard</h1>
+                </div>
+            </div>
             <p class="brand-copy">Route quotes and orders across multiple crypto exchanges from a single interface.</p>
         </div>
 
-        <div class="topbar-metrics">
-            <article class="metric-card">
-                <span>Connection</span>
-                <strong id="connectionBadge" class="status-badge disconnected">Disconnected</strong>
-            </article>
-            <article class="metric-card">
-                <span>Server Time</span>
-                <strong id="serverClock">--:--:--</strong>
-            </article>
-            <article class="metric-card">
-                <span>Watchlist</span>
-                <strong id="watchlistCount">0</strong>
-            </article>
-            <article class="metric-card">
-                <span>Open Orders</span>
-                <strong id="openOrderCount">0</strong>
-            </article>
-            <article class="metric-card">
-                <span>Inactive</span>
-                <strong id="inactiveOrderCount">0</strong>
-            </article>
-            <article class="metric-card">
-                <span>Coverage</span>
-                <button type="button" id="openCatalogBtn" class="catalog-count-btn">-- Exchanges</button>
-            </article>
+        <div class="topbar-utility">
+            <div class="topbar-status">
+                <div class="topbar-heading">
+                    <span class="topbar-label">Connection</span>
+                    <strong id="connectionBadge" class="topbar-value topbar-connection disconnected">Disconnected</strong>
+                </div>
+                <div class="topbar-heading">
+                    <span class="topbar-label">UTC</span>
+                    <strong id="serverClock" class="topbar-value">--:--:--</strong>
+                </div>
+                <div class="topbar-heading">
+                    <span class="topbar-label">Coverage</span>
+                    <button type="button" id="openCatalogBtn" class="topbar-link">
+                        <span id="coverageCount" class="topbar-value">-- Exchanges</span>
+                    </button>
+                </div>
+            </div>
+            <div class="topbar-actions">
+                <label class="theme-picker" for="themeSelect">
+                    <span>L&amp;F</span>
+                    <select id="themeSelect" class="theme-select" aria-label="Look and feel"></select>
+                </label>
+                <button type="button" id="openProfilesBtn" class="secondary-btn compact-btn">Exchange Profiles</button>
+                <form th:action="@{/logout}" method="post" class="logout-form">
+                    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                    <button type="submit" class="secondary-btn compact-btn">Logout</button>
+                </form>
+            </div>
         </div>
     </header>
 
@@ -57,7 +75,10 @@
                     <h2>Market Monitor</h2>
                     <p>Type in the ticker column and press Return to resolve the route, venue, and asset class.</p>
                 </div>
-                <div class="mode-pill" id="orderModePill">Paper Gateway</div>
+                <div class="action-cluster compact-actions">
+                    <button type="button" id="openLatencyBtn" class="secondary-btn compact-btn">L1 Latency</button>
+                    <div class="mode-pill" id="orderModePill">Paper Gateway</div>
+                </div>
             </div>
 
             <div class="table-wrap watchlist-wrap">
@@ -136,6 +157,10 @@
                         <select id="timeInForceSelect" name="timeInForce" required></select>
                     </label>
                     <label>
+                        <span>Client Order ID</span>
+                        <input id="clientOrderIdInput" name="clientOrderId" type="text" maxlength="128" placeholder="Optional client order id">
+                    </label>
+                    <label>
                         <span>Quantity</span>
                         <input id="quantityInput" name="quantity" type="number" step="any" min="0" placeholder="0.01" required>
                     </label>
@@ -161,7 +186,10 @@
 
                     <p id="ticketNote" class="ticket-note"></p>
 
-                    <button type="submit" id="submitOrderButton" class="primary-btn submit-btn">Transmit Order</button>
+                    <div class="form-actions">
+                        <button type="submit" id="submitOrderButton" class="primary-btn submit-btn">Transmit Order</button>
+                        <button type="button" id="clearOrderEditButton" class="secondary-btn hidden">Clear Edit</button>
+                    </div>
                 </form>
             </div>
         </aside>
@@ -182,17 +210,120 @@
                         <th>Time</th>
                         <th>Symbol</th>
                         <th>Route</th>
+                        <th>Client ID</th>
                         <th>Side</th>
                         <th>Type</th>
                         <th>TIF</th>
                         <th>Qty</th>
+                        <th>Filled</th>
                         <th>Limit</th>
-                        <th>Ref</th>
                         <th>Status</th>
                         <th></th>
                     </tr>
                     </thead>
                     <tbody id="orderRows"></tbody>
+                </table>
+            </div>
+        </section>
+    </section>
+
+    <section class="broker-grid">
+        <section class="panel">
+            <div class="panel-head">
+                <div>
+                    <p class="panel-kicker">Broker</p>
+                    <h2>Connections</h2>
+                    <p>Saved profiles and live broker connectivity by exchange.</p>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table class="workstation-table">
+                    <thead>
+                    <tr>
+                        <th>Exchange</th>
+                        <th>Environment</th>
+                        <th>Account</th>
+                        <th>Status</th>
+                        <th>Updated</th>
+                    </tr>
+                    </thead>
+                    <tbody id="brokerConnectionRows"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-head">
+                <div>
+                    <p class="panel-kicker">Broker</p>
+                    <h2>Balances</h2>
+                    <p>Account equity and available funds from connected broker feeds.</p>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table class="workstation-table">
+                    <thead>
+                    <tr>
+                        <th>Exchange</th>
+                        <th>Equity</th>
+                        <th>Available</th>
+                        <th>Updated</th>
+                    </tr>
+                    </thead>
+                    <tbody id="balanceRows"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="panel broker-wide">
+            <div class="panel-head">
+                <div>
+                    <p class="panel-kicker">Broker</p>
+                    <h2>Positions</h2>
+                    <p>Current positions from connected exchange brokers.</p>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table class="workstation-table">
+                    <thead>
+                    <tr>
+                        <th>Exchange</th>
+                        <th>Symbol</th>
+                        <th>Side</th>
+                        <th>Size</th>
+                        <th>Average</th>
+                        <th>Liq</th>
+                        <th>Status</th>
+                    </tr>
+                    </thead>
+                    <tbody id="positionRows"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="panel broker-wide">
+            <div class="panel-head">
+                <div>
+                    <p class="panel-kicker">Broker</p>
+                    <h2>Fills</h2>
+                    <p>Recent fill events streamed from broker integrations.</p>
+                </div>
+            </div>
+            <div class="table-wrap orders-wrap">
+                <table class="workstation-table">
+                    <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Exchange</th>
+                        <th>Symbol</th>
+                        <th>Side</th>
+                        <th>Size</th>
+                        <th>Price</th>
+                        <th>Client ID</th>
+                        <th>Type</th>
+                    </tr>
+                    </thead>
+                    <tbody id="fillRows"></tbody>
                 </table>
             </div>
         </section>
@@ -263,6 +394,93 @@
 
         <div class="instrument-dialog-actions">
             <button type="button" id="catalogCloseButton" class="primary-btn">Close</button>
+        </div>
+    </section>
+</div>
+
+<div id="latencyDialog" class="instrument-dialog hidden" aria-hidden="true">
+    <div class="instrument-dialog-backdrop" data-action="close-latency"></div>
+    <section id="latencyDialogPanel" class="instrument-dialog-panel latency-dialog-panel" role="dialog" aria-modal="true" aria-labelledby="latencyDialogTitle" tabindex="-1">
+        <div class="instrument-dialog-head">
+            <div>
+                <p class="panel-kicker">Market Data</p>
+                <h2 id="latencyDialogTitle">L1 Quote Latency</h2>
+                <p>Measured from the exchange event timestamp on each L1 quote to the time Switchboard processes it. Percentiles use a bounded recent sample window per exchange.</p>
+            </div>
+            <button type="button" id="closeLatencyDialogButton" class="icon-btn dialog-close" aria-label="Close quote latency dialog">×</button>
+        </div>
+
+        <div class="table-wrap picker-wrap">
+            <table class="workstation-table">
+                <thead>
+                <tr>
+                    <th>Exchange</th>
+                    <th>Last</th>
+                    <th>P50</th>
+                    <th>P95</th>
+                    <th>Samples</th>
+                    <th>Updated</th>
+                </tr>
+                </thead>
+                <tbody id="latencyRows"></tbody>
+            </table>
+        </div>
+
+        <div class="instrument-dialog-actions">
+            <button type="button" id="latencyCloseButton" class="primary-btn">Close</button>
+        </div>
+    </section>
+</div>
+
+<div id="brokerProfilesDialog" class="instrument-dialog hidden" aria-hidden="true">
+    <div class="instrument-dialog-backdrop" data-action="close-profiles"></div>
+    <section id="brokerProfilesDialogPanel" class="instrument-dialog-panel catalog-dialog-panel" role="dialog" aria-modal="true" aria-labelledby="brokerProfilesTitle" tabindex="-1">
+        <div class="instrument-dialog-head">
+            <div>
+                <p class="panel-kicker">Admin</p>
+                <h2 id="brokerProfilesTitle">Exchange Broker Profiles</h2>
+                <p>Credentials are encrypted at rest and masked by default in the UI.</p>
+            </div>
+            <button type="button" id="closeProfilesDialogButton" class="icon-btn dialog-close" aria-label="Close exchange profiles">×</button>
+        </div>
+
+        <div class="profiles-layout">
+            <div class="table-wrap picker-wrap">
+                <table class="workstation-table">
+                    <thead>
+                    <tr>
+                        <th>Exchange</th>
+                        <th>Environment</th>
+                        <th>Account</th>
+                        <th>Status</th>
+                    </tr>
+                    </thead>
+                    <tbody id="brokerProfileRows"></tbody>
+                </table>
+            </div>
+
+            <form id="brokerProfileForm" class="profile-form">
+                <input type="hidden" id="profileExchangeInput">
+                <div class="profile-headline">
+                    <strong id="profileFormTitle">Select an exchange</strong>
+                    <span id="profileFormSubtitle">Choose an exchange row to view or edit its live broker profile.</span>
+                </div>
+
+                <label>
+                    <span>Environment</span>
+                    <select id="profileEnvironmentSelect" required>
+                        <option value="MAINNET">Mainnet</option>
+                        <option value="TESTNET">Testnet</option>
+                    </select>
+                </label>
+
+                <div id="profileFieldContainer" class="profile-field-grid"></div>
+
+                <div class="form-actions">
+                    <button type="submit" id="saveProfileButton" class="primary-btn">Save Profile</button>
+                    <button type="button" id="deleteProfileButton" class="secondary-btn">Delete Profile</button>
+                </div>
+            </form>
         </div>
     </section>
 </div>

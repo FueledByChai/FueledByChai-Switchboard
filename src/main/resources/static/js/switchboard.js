@@ -1,13 +1,38 @@
 (function () {
     const TICK_FLASH_MS = 1400;
     const MIN_WATCHLIST_ROWS = 20;
+    const THEME_STORAGE_KEY = "switchboard.theme";
+    const DEFAULT_THEME_ID = "switchboard-dark";
+    const THEMES = Object.freeze([
+        {id: "switchboard-dark", label: "Switchboard Dark"},
+        {id: "bloomberg-inspired", label: "Bloomberg Inspired"},
+        {id: "tradingview-midnight", label: "TradingView Midnight"},
+        {id: "reuters-eikon", label: "Reuters Eikon"},
+        {id: "tws-mosaic", label: "TWS Mosaic"},
+        {id: "cqg-green", label: "CQG Green"},
+        {id: "sierra-chart", label: "Sierra Chart"},
+        {id: "nasdaq-depth", label: "Nasdaq Depth"},
+        {id: "ice-blue", label: "ICE Blue"},
+        {id: "midnight-mono", label: "Midnight Mono"}
+    ]);
 
     const state = {
         metadata: defaultMetadata(),
         markets: [],
         orders: [],
+        quoteLatencies: [],
+        brokerConnections: [],
+        balances: [],
+        positions: [],
+        fills: [],
+        brokerProfiles: {
+            definitions: [],
+            profiles: []
+        },
         selectedMarketId: null,
         selectedSide: "BUY",
+        editingOrderId: null,
+        selectedProfileExchange: null,
         lastValueByField: new Map(),
         tickDirectionByField: new Map(),
         precisionByMarket: new Map(),
@@ -17,16 +42,19 @@
         reconnectTimer: null,
         toastTimer: null,
         marketLayoutSignature: "",
+        orderRenderSignature: "",
+        themeId: DEFAULT_THEME_ID,
         instrumentPicker: defaultInstrumentPicker(),
-        catalogData: null
+        catalogData: null,
+        csrfToken: document.querySelector('meta[name="_csrf"]')?.content || "",
+        csrfHeader: document.querySelector('meta[name="_csrf_header"]')?.content || "X-CSRF-TOKEN"
     };
 
     const dom = {
         connectionBadge: document.getElementById("connectionBadge"),
         serverClock: document.getElementById("serverClock"),
-        watchlistCount: document.getElementById("watchlistCount"),
-        openOrderCount: document.getElementById("openOrderCount"),
-        inactiveOrderCount: document.getElementById("inactiveOrderCount"),
+        coverageCount: document.getElementById("coverageCount"),
+        themeSelect: document.getElementById("themeSelect"),
         orderModePill: document.getElementById("orderModePill"),
         toast: document.getElementById("toast"),
         marketRows: document.getElementById("marketRows"),
@@ -42,6 +70,7 @@
         orderForm: document.getElementById("orderForm"),
         orderTypeSelect: document.getElementById("orderTypeSelect"),
         timeInForceSelect: document.getElementById("timeInForceSelect"),
+        clientOrderIdInput: document.getElementById("clientOrderIdInput"),
         quantityInput: document.getElementById("quantityInput"),
         limitPriceField: document.getElementById("limitPriceField"),
         limitPriceInput: document.getElementById("limitPriceInput"),
@@ -50,8 +79,13 @@
         ticketMode: document.getElementById("ticketMode"),
         ticketNote: document.getElementById("ticketNote"),
         submitOrderButton: document.getElementById("submitOrderButton"),
+        clearOrderEditButton: document.getElementById("clearOrderEditButton"),
         sideButtons: Array.from(document.querySelectorAll(".side-btn")),
         orderRows: document.getElementById("orderRows"),
+        brokerConnectionRows: document.getElementById("brokerConnectionRows"),
+        balanceRows: document.getElementById("balanceRows"),
+        positionRows: document.getElementById("positionRows"),
+        fillRows: document.getElementById("fillRows"),
         instrumentDialog: document.getElementById("instrumentDialog"),
         instrumentDialogPanel: document.getElementById("instrumentDialogPanel"),
         instrumentDialogTitle: document.getElementById("instrumentDialogTitle"),
@@ -61,6 +95,7 @@
         cancelInstrumentButton: document.getElementById("cancelInstrumentButton"),
         confirmInstrumentButton: document.getElementById("confirmInstrumentButton"),
         openCatalogBtn: document.getElementById("openCatalogBtn"),
+        openLatencyBtn: document.getElementById("openLatencyBtn"),
         catalogDialog: document.getElementById("catalogDialog"),
         catalogDialogPanel: document.getElementById("catalogDialogPanel"),
         closeCatalogDialogButton: document.getElementById("closeCatalogDialogButton"),
@@ -69,12 +104,31 @@
         catalogTableHead: document.getElementById("catalogTableHead"),
         catalogDrilldownHead: document.getElementById("catalogDrilldownHead"),
         catalogDrilldownTitle: document.getElementById("catalogDrilldownTitle"),
-        backFromDrilldownBtn: document.getElementById("backFromDrilldownBtn")
+        backFromDrilldownBtn: document.getElementById("backFromDrilldownBtn"),
+        latencyDialog: document.getElementById("latencyDialog"),
+        latencyDialogPanel: document.getElementById("latencyDialogPanel"),
+        closeLatencyDialogButton: document.getElementById("closeLatencyDialogButton"),
+        latencyCloseButton: document.getElementById("latencyCloseButton"),
+        latencyRows: document.getElementById("latencyRows"),
+        openProfilesBtn: document.getElementById("openProfilesBtn"),
+        brokerProfilesDialog: document.getElementById("brokerProfilesDialog"),
+        brokerProfilesDialogPanel: document.getElementById("brokerProfilesDialogPanel"),
+        closeProfilesDialogButton: document.getElementById("closeProfilesDialogButton"),
+        brokerProfileRows: document.getElementById("brokerProfileRows"),
+        brokerProfileForm: document.getElementById("brokerProfileForm"),
+        profileExchangeInput: document.getElementById("profileExchangeInput"),
+        profileEnvironmentSelect: document.getElementById("profileEnvironmentSelect"),
+        profileFieldContainer: document.getElementById("profileFieldContainer"),
+        profileFormTitle: document.getElementById("profileFormTitle"),
+        profileFormSubtitle: document.getElementById("profileFormSubtitle"),
+        saveProfileButton: document.getElementById("saveProfileButton"),
+        deleteProfileButton: document.getElementById("deleteProfileButton")
     };
 
     init();
 
     function init() {
+        hydrateTheme();
         hydrateMetadata();
         bindEvents();
         renderAll();
@@ -103,7 +157,7 @@
                 {value: "IOC", label: "IOC"},
                 {value: "POST_ONLY", label: "Post Only"}
             ],
-            orderMode: "PAPER",
+            orderMode: "LIVE",
             maxRows: 50
         };
     }
@@ -123,12 +177,50 @@
         };
     }
 
+    function hydrateTheme() {
+        if (dom.themeSelect) {
+            dom.themeSelect.innerHTML = THEMES.map(theme => `
+                <option value="${escapeAttribute(theme.id)}">${escapeHtml(theme.label)}</option>
+            `).join("");
+        }
+        applyTheme(document.documentElement.dataset.theme || loadStoredTheme(), false);
+    }
+
+    function loadStoredTheme() {
+        try {
+            return localStorage.getItem(THEME_STORAGE_KEY) || DEFAULT_THEME_ID;
+        } catch (error) {
+            return DEFAULT_THEME_ID;
+        }
+    }
+
+    function applyTheme(themeId, persist) {
+        const resolvedTheme = resolveTheme(themeId);
+        state.themeId = resolvedTheme;
+        document.documentElement.dataset.theme = resolvedTheme;
+        if (dom.themeSelect && dom.themeSelect.value !== resolvedTheme) {
+            dom.themeSelect.value = resolvedTheme;
+        }
+        if (persist) {
+            try {
+                localStorage.setItem(THEME_STORAGE_KEY, resolvedTheme);
+            } catch (error) {
+                // Ignore storage failures and keep the theme applied for this session.
+            }
+        }
+    }
+
+    function resolveTheme(themeId) {
+        return THEMES.some(theme => theme.id === themeId) ? themeId : DEFAULT_THEME_ID;
+    }
+
     function bindEvents() {
         dom.marketRows.addEventListener("click", onMarketTableClick);
         dom.marketRows.addEventListener("input", onMarketDraftInput);
         dom.marketRows.addEventListener("keydown", onMarketDraftKeyDown);
         dom.orderForm.addEventListener("submit", onOrderSubmit);
         dom.orderRows.addEventListener("click", onOrderTableClick);
+        dom.clearOrderEditButton.addEventListener("click", clearOrderEdit);
         dom.instrumentDialog.addEventListener("click", onInstrumentDialogClick);
         dom.closeInstrumentDialogButton.addEventListener("click", closeInstrumentDialog);
         dom.cancelInstrumentButton.addEventListener("click", closeInstrumentDialog);
@@ -141,7 +233,20 @@
         dom.catalogDialog.addEventListener("click", onCatalogDialogClick);
         dom.catalogDialogRows.addEventListener("click", onCatalogRowClick);
         dom.backFromDrilldownBtn.addEventListener("click", closeCatalogDrilldown);
+        dom.openLatencyBtn.addEventListener("click", openLatencyDialog);
+        dom.closeLatencyDialogButton.addEventListener("click", closeLatencyDialog);
+        dom.latencyCloseButton.addEventListener("click", closeLatencyDialog);
+        dom.latencyDialog.addEventListener("click", onLatencyDialogClick);
+        dom.openProfilesBtn.addEventListener("click", openProfilesDialog);
+        dom.closeProfilesDialogButton.addEventListener("click", closeProfilesDialog);
+        dom.brokerProfilesDialog.addEventListener("click", onBrokerProfilesDialogClick);
+        dom.brokerProfileRows.addEventListener("click", onBrokerProfileRowClick);
+        dom.brokerProfileForm.addEventListener("submit", onBrokerProfileSubmit);
+        dom.deleteProfileButton.addEventListener("click", onDeleteProfile);
         document.addEventListener("keydown", onDocumentKeyDown);
+        if (dom.themeSelect) {
+            dom.themeSelect.addEventListener("change", () => applyTheme(dom.themeSelect.value, true));
+        }
 
         dom.sideButtons.forEach(button => {
             button.addEventListener("click", () => {
@@ -169,15 +274,27 @@
 
     async function loadBootstrap() {
         try {
-            const [metadata, snapshot] = await Promise.all([
+            const [metadata, snapshot, brokerProfiles] = await Promise.all([
                 api("/api/metadata"),
-                api("/api/snapshot")
+                api("/api/snapshot"),
+                api("/api/admin/broker/profiles")
             ]);
             state.metadata = {...defaultMetadata(), ...(metadata || {})};
+            applyBrokerProfiles(brokerProfiles);
             hydrateMetadata();
             applySnapshot(snapshot);
         } catch (error) {
             showToast(error.message || "Unable to initialize the workstation.");
+        }
+    }
+
+    function applyBrokerProfiles(payload) {
+        state.brokerProfiles = {
+            definitions: Array.isArray(payload?.definitions) ? payload.definitions : [],
+            profiles: Array.isArray(payload?.profiles) ? payload.profiles : []
+        };
+        if (!state.selectedProfileExchange && state.brokerProfiles.definitions.length) {
+            state.selectedProfileExchange = state.brokerProfiles.definitions[0].exchange;
         }
     }
 
@@ -187,7 +304,9 @@
         dom.orderModePill.textContent = `${formatEnumLabel(state.metadata.orderMode || "PAPER")} Gateway`;
         dom.ticketMode.textContent = formatEnumLabel(state.metadata.orderMode || "PAPER");
         const exchangeCount = (state.metadata.exchanges || []).length;
-        dom.openCatalogBtn.textContent = `${exchangeCount} Exchange${exchangeCount !== 1 ? "s" : ""}`;
+        if (dom.coverageCount) {
+            dom.coverageCount.textContent = `${exchangeCount} Exchange${exchangeCount !== 1 ? "s" : ""}`;
+        }
         syncSideButtons();
         toggleLimitField();
     }
@@ -228,34 +347,45 @@
     async function onOrderSubmit(event) {
         event.preventDefault();
         const market = getSelectedMarket();
-        if (!market) {
+        if (!market && !state.editingOrderId) {
             showToast("Select a market before transmitting an order.");
             return;
         }
 
         const payload = {
-            marketId: market.id,
+            marketId: market?.id,
             side: state.selectedSide,
             orderType: dom.orderTypeSelect.value,
             timeInForce: dom.timeInForceSelect.value,
+            clientOrderId: dom.clientOrderIdInput.value.trim() || null,
             quantity: dom.quantityInput.value,
             limitPrice: dom.orderTypeSelect.value === "LIMIT" ? dom.limitPriceInput.value : null
         };
 
         try {
-            const created = await api("/api/orders", {
-                method: "POST",
-                body: JSON.stringify(payload)
-            });
+            const editingOrderId = state.editingOrderId;
+            const created = editingOrderId
+                ? await api(`/api/orders/${encodeURIComponent(editingOrderId)}`, {
+                    method: "POST",
+                    body: JSON.stringify(payload)
+                })
+                : await api("/api/orders", {
+                    method: "POST",
+                    body: JSON.stringify(payload)
+                });
             state.orders = mergeById(state.orders, created);
+            clearOrderEdit();
             dom.quantityInput.value = "";
+            dom.clientOrderIdInput.value = "";
             if (dom.orderTypeSelect.value === "LIMIT") {
                 applySuggestedLimitPrice(true);
             }
             updateTicketSummary();
             renderSummary();
             renderOrders();
-            showToast(`Order staged: ${formatEnumLabel(created.side)} ${created.symbol} on ${formatEnumLabel(created.exchange)}.`);
+            showToast(editingOrderId
+                ? `Modify requested for ${created.symbol}.`
+                : `Live order submitted: ${formatEnumLabel(created.side)} ${created.symbol} on ${formatEnumLabel(created.exchange)}.`);
         } catch (error) {
             showToast(error.message);
         }
@@ -314,15 +444,27 @@
             return;
         }
 
+        const order = state.orders.find(candidate => candidate.id === button.dataset.orderId);
+        const action = button.dataset.action || "cancel";
+
+        if (action === "modify") {
+            if (!order) {
+                showToast("Unable to load order details for modification.");
+                return;
+            }
+            loadOrderIntoTicket(order);
+            return;
+        }
+
         try {
             await api(`/api/orders/${button.dataset.orderId}`, {method: "DELETE"});
             const now = new Date().toISOString();
-            state.orders = state.orders.map(order => order.id === button.dataset.orderId
-                ? {...order, status: "CANCELED", updatedAt: now, canceledAt: now}
-                : order);
+            state.orders = state.orders.map(existing => existing.id === button.dataset.orderId
+                ? {...existing, status: "PENDING_CANCEL", updatedAt: now}
+                : existing);
             renderSummary();
             renderOrders();
-            showToast("Order canceled.");
+            showToast("Cancel requested.");
         } catch (error) {
             showToast(error.message);
         }
@@ -362,6 +504,21 @@
         if (Array.isArray(payload?.orders)) {
             state.orders = payload.orders;
         }
+        if (Array.isArray(payload?.quoteLatencies)) {
+            state.quoteLatencies = payload.quoteLatencies;
+        }
+        if (Array.isArray(payload?.brokerConnections)) {
+            state.brokerConnections = payload.brokerConnections;
+        }
+        if (Array.isArray(payload?.balances)) {
+            state.balances = payload.balances;
+        }
+        if (Array.isArray(payload?.positions)) {
+            state.positions = payload.positions;
+        }
+        if (Array.isArray(payload?.fills)) {
+            state.fills = payload.fills;
+        }
         state.serverTime = payload?.serverTime || state.serverTime;
         syncSelectedMarket();
         renderLiveState();
@@ -400,6 +557,7 @@
     function renderAll() {
         renderLiveState();
         renderInstrumentDialog();
+        renderBrokerProfilesDialog();
     }
 
     function renderLiveState() {
@@ -407,15 +565,16 @@
         renderMarkets();
         renderTicket();
         renderOrders();
+        renderBrokerConnections();
+        renderBalances();
+        renderPositions();
+        renderFills();
+        if (!dom.latencyDialog.classList.contains("hidden")) {
+            renderLatencyDialog();
+        }
     }
 
     function renderSummary() {
-        const openOrders = state.orders.filter(order => order.status === "OPEN");
-        const inactiveOrders = state.orders.filter(order => order.status !== "OPEN");
-
-        dom.watchlistCount.textContent = String(state.markets.length);
-        dom.openOrderCount.textContent = String(openOrders.length);
-        dom.inactiveOrderCount.textContent = String(inactiveOrders.length);
         dom.serverClock.textContent = formatClock(state.serverTime);
     }
 
@@ -625,6 +784,7 @@
             dom.ticketNote.textContent = "";
             dom.ticketReferencePrice.textContent = "--";
             dom.ticketEstimatedNotional.textContent = "--";
+            dom.submitOrderButton.textContent = state.editingOrderId ? "Modify Order" : "Transmit Order";
             return;
         }
 
@@ -635,7 +795,9 @@
         dom.selectedBid.textContent = formatPrice(market.bid);
         dom.selectedAsk.textContent = formatPrice(market.ask);
         dom.selectedLast.textContent = formatPrice(market.last);
-        dom.ticketNote.textContent = "Paper-mode order store only. Replace the order service with live routing when execution adapters are ready.";
+        dom.ticketNote.textContent = ticketNoteForMarket(market);
+        dom.submitOrderButton.textContent = state.editingOrderId ? "Modify Order" : "Transmit Order";
+        dom.clearOrderEditButton.classList.toggle("hidden", !state.editingOrderId);
 
         syncSideButtons();
         toggleLimitField();
@@ -643,42 +805,335 @@
     }
 
     function renderOrders() {
-        const openOrders = state.orders.filter(order => order.status === "OPEN");
+        const orders = Array.isArray(state.orders) ? state.orders : [];
+        const nextSignature = buildOrderRenderSignature(orders);
+        if (state.orderRenderSignature === nextSignature) {
+            return;
+        }
+        state.orderRenderSignature = nextSignature;
 
-        if (!openOrders.length) {
+        if (!orders.length) {
             dom.orderRows.innerHTML = `
                 <tr>
-                    <td colspan="11" class="empty-row">
-                        <strong>No open orders</strong>
-                        <span>Transmit from the ticket to stage an order in the blotter.</span>
+                    <td colspan="12" class="empty-row">
+                        <strong>No broker orders yet</strong>
+                        <span>Transmit from the ticket after connecting an exchange profile.</span>
                     </td>
                 </tr>
             `;
             return;
         }
 
-        dom.orderRows.innerHTML = openOrders.map(order => `
+        dom.orderRows.innerHTML = orders.map(order => `
             <tr>
-                <td>${formatTime(order.createdAt)}</td>
+                <td>${formatTime(order.updatedAt || order.createdAt)}</td>
                 <td>
                     <div class="symbol-cell">
                         <strong>${escapeHtml(order.symbol || "--")}</strong>
                         <span>${escapeHtml(order.exchangeSymbol || "--")}</span>
                     </div>
                 </td>
-                <td>${escapeHtml(formatEnumLabel(order.exchange))}</td>
+                <td>${escapeHtml(order.exchangeLabel || formatEnumLabel(order.exchange))}</td>
+                <td class="number-cell">${escapeHtml(order.clientOrderId || "--")}</td>
                 <td><span class="side-pill ${order.side === "BUY" ? "buy" : "sell"}">${escapeHtml(formatEnumLabel(order.side))}</span></td>
                 <td>${escapeHtml(formatEnumLabel(order.orderType))}</td>
                 <td>${escapeHtml(formatEnumLabel(order.timeInForce))}</td>
                 <td class="number-cell">${formatNumber(order.quantity, 6)}</td>
+                <td class="number-cell">${formatNumber(order.filledQuantity, 6)}</td>
                 <td class="number-cell">${formatPrice(order.limitPrice)}</td>
-                <td class="number-cell">${formatPrice(order.referencePrice)}</td>
                 <td><span class="status-pill">${escapeHtml(formatEnumLabel(order.status))}</span></td>
                 <td>
-                    <button type="button" class="cancel-btn" data-order-id="${escapeAttribute(order.id)}">Cancel</button>
+                    <div class="action-cluster compact-actions">
+                        <button type="button" class="secondary-btn compact-btn order-action-btn" data-action="modify" data-order-id="${escapeAttribute(order.id)}" ${!canModifyOrder(order) ? "disabled" : ""}>Modify</button>
+                        <button type="button" class="secondary-btn compact-btn order-action-btn" data-action="cancel" data-order-id="${escapeAttribute(order.id)}" ${!canCancelOrder(order) ? "disabled" : ""}>Cancel</button>
+                    </div>
                 </td>
             </tr>
         `).join("");
+    }
+
+    function buildOrderRenderSignature(orders) {
+        if (!Array.isArray(orders) || !orders.length) {
+            return "empty";
+        }
+
+        return orders.map(order => ([
+            order?.id,
+            order?.updatedAt,
+            order?.createdAt,
+            order?.symbol,
+            order?.exchangeSymbol,
+            order?.exchangeLabel,
+            order?.clientOrderId,
+            order?.side,
+            order?.orderType,
+            order?.timeInForce,
+            order?.quantity,
+            order?.filledQuantity,
+            order?.limitPrice,
+            order?.status,
+            canModifyOrder(order) ? "1" : "0",
+            canCancelOrder(order) ? "1" : "0"
+        ].map(value => value == null ? "" : String(value)).join("~"))).join("||");
+    }
+
+    function renderBrokerConnections() {
+        const connections = Array.isArray(state.brokerConnections) ? state.brokerConnections : [];
+        if (!connections.length) {
+            dom.brokerConnectionRows.innerHTML = `<tr><td colspan="5" class="empty-row"><strong>No broker adapters configured.</strong></td></tr>`;
+            return;
+        }
+
+        dom.brokerConnectionRows.innerHTML = connections.map(connection => `
+            <tr>
+                <td>${escapeHtml(connection.exchangeLabel || formatEnumLabel(connection.exchange))}</td>
+                <td>${escapeHtml(formatEnumLabel(connection.environment || "--"))}</td>
+                <td>${escapeHtml(connection.accountLabel || "--")}</td>
+                <td><span class="status-pill">${escapeHtml(formatEnumLabel(connection.status || "UNKNOWN"))}</span></td>
+                <td>${escapeHtml(formatAge(connection.updatedAt))}</td>
+            </tr>
+        `).join("");
+    }
+
+    function renderBalances() {
+        const balances = Array.isArray(state.balances) ? state.balances : [];
+        if (!balances.length) {
+            dom.balanceRows.innerHTML = `<tr><td colspan="4" class="empty-row"><strong>No balance updates yet.</strong></td></tr>`;
+            return;
+        }
+
+        dom.balanceRows.innerHTML = balances.map(balance => `
+            <tr>
+                <td>${escapeHtml(balance.exchangeLabel || formatEnumLabel(balance.exchange))}</td>
+                <td class="number-cell">${formatCurrencyLike(balance.equity)}</td>
+                <td class="number-cell">${formatCurrencyLike(balance.availableFunds)}</td>
+                <td>${escapeHtml(formatAge(balance.updatedAt))}</td>
+            </tr>
+        `).join("");
+    }
+
+    function renderPositions() {
+        const positions = Array.isArray(state.positions) ? state.positions : [];
+        if (!positions.length) {
+            dom.positionRows.innerHTML = `<tr><td colspan="7" class="empty-row"><strong>No open positions reported.</strong></td></tr>`;
+            return;
+        }
+
+        dom.positionRows.innerHTML = positions.map(position => `
+            <tr>
+                <td>${escapeHtml(position.exchangeLabel || formatEnumLabel(position.exchange))}</td>
+                <td>
+                    <div class="symbol-cell">
+                        <strong>${escapeHtml(position.symbol || "--")}</strong>
+                        <span>${escapeHtml(position.exchangeSymbol || "--")}</span>
+                    </div>
+                </td>
+                <td>${escapeHtml(formatEnumLabel(position.side))}</td>
+                <td class="number-cell">${formatNumber(position.size, 6)}</td>
+                <td class="number-cell">${formatPrice(position.averageCost)}</td>
+                <td class="number-cell">${formatPrice(position.liquidationPrice)}</td>
+                <td>${escapeHtml(formatEnumLabel(position.status))}</td>
+            </tr>
+        `).join("");
+    }
+
+    function renderFills() {
+        const fills = Array.isArray(state.fills) ? state.fills : [];
+        if (!fills.length) {
+            dom.fillRows.innerHTML = `<tr><td colspan="8" class="empty-row"><strong>No fill events yet.</strong></td></tr>`;
+            return;
+        }
+
+        dom.fillRows.innerHTML = fills.map(fill => `
+            <tr>
+                <td>${formatTime(fill.time)}</td>
+                <td>${escapeHtml(fill.exchangeLabel || formatEnumLabel(fill.exchange))}</td>
+                <td>
+                    <div class="symbol-cell">
+                        <strong>${escapeHtml(fill.symbol || "--")}</strong>
+                        <span>${escapeHtml(fill.exchangeSymbol || "--")}</span>
+                    </div>
+                </td>
+                <td><span class="side-pill ${fill.side === "BUY" ? "buy" : "sell"}">${escapeHtml(formatEnumLabel(fill.side))}</span></td>
+                <td class="number-cell">${formatNumber(fill.size, 6)}</td>
+                <td class="number-cell">${formatPrice(fill.price)}</td>
+                <td class="number-cell">${escapeHtml(fill.clientOrderId || "--")}</td>
+                <td>${fill.snapshot ? "Snapshot" : fill.taker ? "Taker" : "Maker"}</td>
+            </tr>
+        `).join("");
+    }
+
+    function openLatencyDialog() {
+        dom.latencyDialog.classList.remove("hidden");
+        dom.latencyDialog.setAttribute("aria-hidden", "false");
+        renderLatencyDialog();
+        dom.latencyDialogPanel.focus({preventScroll: true});
+    }
+
+    function closeLatencyDialog() {
+        dom.latencyDialog.classList.add("hidden");
+        dom.latencyDialog.setAttribute("aria-hidden", "true");
+    }
+
+    function onLatencyDialogClick(event) {
+        if (event.target.dataset.action === "close-latency") {
+            closeLatencyDialog();
+        }
+    }
+
+    function renderLatencyDialog() {
+        const latencies = Array.isArray(state.quoteLatencies) ? state.quoteLatencies : [];
+        if (!latencies.length) {
+            dom.latencyRows.innerHTML = `
+                <tr>
+                    <td colspan="6" class="empty-row">
+                        <strong>No timestamped L1 quotes yet.</strong>
+                        <span>Latency stats will appear after exchanges start streaming quotes with event timestamps.</span>
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        dom.latencyRows.innerHTML = latencies.map(latency => `
+            <tr>
+                <td class="latency-exchange-cell">${escapeHtml(latency.exchangeLabel || formatEnumLabel(latency.exchange))}</td>
+                <td class="number-cell">${escapeHtml(formatLatency(latency.lastLatencyMs))}</td>
+                <td class="number-cell">${escapeHtml(formatLatency(latency.p50LatencyMs))}</td>
+                <td class="number-cell">${escapeHtml(formatLatency(latency.p95LatencyMs))}</td>
+                <td class="number-cell">${escapeHtml(formatSampleCount(latency.sampleCount))}</td>
+                <td>${formatTime(latency.lastProcessedAt)}</td>
+            </tr>
+        `).join("");
+    }
+
+    function openProfilesDialog() {
+        dom.brokerProfilesDialog.classList.remove("hidden");
+        dom.brokerProfilesDialog.setAttribute("aria-hidden", "false");
+        renderBrokerProfilesDialog();
+        dom.brokerProfilesDialogPanel.focus({preventScroll: true});
+    }
+
+    function closeProfilesDialog() {
+        dom.brokerProfilesDialog.classList.add("hidden");
+        dom.brokerProfilesDialog.setAttribute("aria-hidden", "true");
+    }
+
+    function onBrokerProfilesDialogClick(event) {
+        if (event.target.dataset.action === "close-profiles") {
+            closeProfilesDialog();
+        }
+    }
+
+    function onBrokerProfileRowClick(event) {
+        const row = event.target.closest("tr[data-profile-exchange]");
+        if (!row) {
+            return;
+        }
+        state.selectedProfileExchange = row.dataset.profileExchange;
+        renderBrokerProfilesDialog();
+    }
+
+    function renderBrokerProfilesDialog() {
+        const definitions = state.brokerProfiles.definitions || [];
+        const profiles = state.brokerProfiles.profiles || [];
+
+        if (!definitions.length) {
+            dom.brokerProfileRows.innerHTML = `<tr><td colspan="4" class="empty-row"><strong>No broker definitions available.</strong></td></tr>`;
+            return;
+        }
+
+        dom.brokerProfileRows.innerHTML = definitions.map(definition => {
+            const profile = findBrokerProfile(definition.exchange);
+            const selected = state.selectedProfileExchange === definition.exchange;
+            return `
+                <tr data-profile-exchange="${escapeAttribute(definition.exchange)}" class="${selected ? "selected" : ""}">
+                    <td>${escapeHtml(definition.displayName)}</td>
+                    <td>${escapeHtml(profile?.environment ? formatEnumLabel(profile.environment) : "--")}</td>
+                    <td>${escapeHtml(profile?.accountLabel || "--")}</td>
+                    <td>${profile ? "Saved" : "Not Saved"}</td>
+                </tr>
+            `;
+        }).join("");
+
+        const definition = definitions.find(item => item.exchange === state.selectedProfileExchange) || definitions[0];
+        if (!definition) {
+            return;
+        }
+        state.selectedProfileExchange = definition.exchange;
+        const profile = findBrokerProfile(definition.exchange);
+
+        dom.profileExchangeInput.value = definition.exchange;
+        dom.profileFormTitle.textContent = definition.displayName;
+        dom.profileFormSubtitle.textContent = profile
+            ? `Last updated ${formatTime(profile.updatedAt)}. Blank secret fields keep the stored value.`
+            : "Create a live broker profile for this exchange.";
+        dom.profileEnvironmentSelect.value = profile?.environment || "MAINNET";
+        dom.deleteProfileButton.disabled = !profile;
+        dom.profileFieldContainer.innerHTML = (definition.fields || []).map(field => {
+            const savedField = profile?.fields?.find(candidate => candidate.key === field.key);
+            const value = savedField?.value || "";
+            const placeholder = field.secret
+                ? (savedField?.configured ? `${savedField.maskedValue || "Stored"} (leave blank to keep)` : "Enter secret")
+                : (savedField?.helperText || field.helperText || "");
+            return `
+                <label>
+                    <span>${escapeHtml(field.label)}${field.required ? " *" : ""}</span>
+                    <input
+                        id="${escapeAttribute(profileFieldInputId(field.key))}"
+                        data-profile-field="${escapeAttribute(field.key)}"
+                        type="${field.secret ? "password" : "text"}"
+                        value="${escapeAttribute(value)}"
+                        placeholder="${escapeAttribute(placeholder)}"
+                        ${field.required && !field.secret ? "required" : ""}>
+                </label>
+            `;
+        }).join("");
+    }
+
+    async function onBrokerProfileSubmit(event) {
+        event.preventDefault();
+        const exchange = dom.profileExchangeInput.value;
+        if (!exchange) {
+            showToast("Select an exchange before saving a profile.");
+            return;
+        }
+
+        const fields = {};
+        dom.profileFieldContainer.querySelectorAll("[data-profile-field]").forEach(input => {
+            fields[input.dataset.profileField] = input.value;
+        });
+
+        try {
+            const saved = await api(`/api/admin/broker/profiles/${encodeURIComponent(exchange)}`, {
+                method: "PUT",
+                body: JSON.stringify({
+                    environment: dom.profileEnvironmentSelect.value,
+                    fields
+                })
+            });
+            state.brokerProfiles.profiles = mergeProfileByExchange(state.brokerProfiles.profiles, saved);
+            renderBrokerProfilesDialog();
+            showToast(`Saved ${saved.displayName} broker profile.`);
+        } catch (error) {
+            showToast(error.message);
+        }
+    }
+
+    async function onDeleteProfile() {
+        const exchange = dom.profileExchangeInput.value;
+        if (!exchange) {
+            return;
+        }
+
+        try {
+            await api(`/api/admin/broker/profiles/${encodeURIComponent(exchange)}`, {method: "DELETE"});
+            state.brokerProfiles.profiles = state.brokerProfiles.profiles.filter(profile => profile.exchange !== exchange);
+            renderBrokerProfilesDialog();
+            showToast("Broker profile deleted.");
+        } catch (error) {
+            showToast(error.message);
+        }
     }
 
     function syncSideButtons() {
@@ -1126,6 +1581,12 @@
             return;
         }
 
+        if (event.key === "Escape" && !dom.latencyDialog.classList.contains("hidden")) {
+            event.preventDefault();
+            closeLatencyDialog();
+            return;
+        }
+
         if (!state.instrumentPicker.open) {
             return;
         }
@@ -1232,10 +1693,86 @@
         ].join("|");
     }
 
+    function findBrokerProfile(exchange) {
+        return (state.brokerProfiles.profiles || []).find(profile => profile.exchange === exchange) || null;
+    }
+
+    function profileFieldInputId(key) {
+        return `profile-field-${key}`;
+    }
+
+    function mergeProfileByExchange(existingProfiles, nextProfile) {
+        const profiles = (existingProfiles || []).filter(profile => profile.exchange !== nextProfile.exchange);
+        profiles.push(nextProfile);
+        profiles.sort((left, right) => String(left.displayName || left.exchange).localeCompare(String(right.displayName || right.exchange)));
+        return profiles;
+    }
+
+    function isActiveOrderStatus(status) {
+        return ["NEW", "PARTIAL_FILL", "PENDING_CANCEL", "REPLACED"].includes(String(status || "").toUpperCase());
+    }
+
+    function canCancelOrder(order) {
+        return isActiveOrderStatus(order?.status);
+    }
+
+    function canModifyOrder(order) {
+        return ["NEW", "PARTIAL_FILL", "REPLACED"].includes(String(order?.status || "").toUpperCase());
+    }
+
+    function ticketNoteForMarket(market) {
+        const connection = (state.brokerConnections || []).find(item => item.exchange === market.exchange);
+        if (!connection || !connection.configured) {
+            return `Save an encrypted broker profile for ${formatEnumLabel(market.exchange)} before submitting live orders.`;
+        }
+        if (!connection.connected) {
+            return connection.error
+                ? `${formatEnumLabel(market.exchange)} profile is saved but the broker is not connected: ${connection.error}`
+                : `${formatEnumLabel(market.exchange)} profile is saved but the broker is not connected yet.`;
+        }
+        return `${connection.exchangeLabel || formatEnumLabel(connection.exchange)} is connected on ${formatEnumLabel(connection.environment)}. Orders route live to the exchange broker.`;
+    }
+
+    function loadOrderIntoTicket(order) {
+        state.editingOrderId = order.id;
+        state.selectedSide = order.side || "BUY";
+        syncSideButtons();
+        if (order.marketId) {
+            state.selectedMarketId = order.marketId;
+        } else {
+            const matchingMarket = state.markets.find(market =>
+                market.exchange === order.exchange && (
+                    market.id === order.marketId
+                    || market.exchangeSymbol === order.exchangeSymbol
+                    || market.symbol === order.symbol
+                ));
+            if (matchingMarket) {
+                state.selectedMarketId = matchingMarket.id;
+            }
+        }
+        dom.orderTypeSelect.value = order.orderType || "LIMIT";
+        dom.timeInForceSelect.value = order.timeInForce || "GTC";
+        dom.clientOrderIdInput.value = order.clientOrderId || "";
+        dom.quantityInput.value = order.quantity ? formatEditableNumber(order.quantity) : "";
+        dom.limitPriceInput.value = order.limitPrice ? formatEditableNumber(order.limitPrice) : "";
+        toggleLimitField();
+        updateTicketSummary();
+        renderTicket();
+        dom.quantityInput.focus();
+        showToast(`Editing ${order.symbol || "order"} for modification.`);
+    }
+
+    function clearOrderEdit() {
+        state.editingOrderId = null;
+        dom.clearOrderEditButton.classList.add("hidden");
+        dom.submitOrderButton.textContent = "Transmit Order";
+    }
+
     async function api(url, options = {}) {
         const response = await fetch(url, {
             headers: {
                 "Content-Type": "application/json",
+                ...(state.csrfToken ? {[state.csrfHeader]: state.csrfToken} : {}),
                 ...(options.headers || {})
             },
             ...options
@@ -1405,6 +1942,25 @@
         });
     }
 
+    function formatLatency(value) {
+        const number = toNumber(value);
+        if (!Number.isFinite(number)) {
+            return "--";
+        }
+        return `${number.toLocaleString(undefined, {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+        })} ms`;
+    }
+
+    function formatSampleCount(value) {
+        const number = toNumber(value);
+        if (!Number.isFinite(number)) {
+            return "--";
+        }
+        return Math.round(number).toLocaleString();
+    }
+
     function formatClock(value) {
         if (!value) {
             return "--:--:--";
@@ -1414,9 +1970,11 @@
             return "--:--:--";
         }
         return date.toLocaleTimeString([], {
+            timeZone: "UTC",
             hour: "2-digit",
             minute: "2-digit",
-            second: "2-digit"
+            second: "2-digit",
+            hour12: false
         });
     }
 

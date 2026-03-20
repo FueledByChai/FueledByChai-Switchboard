@@ -8,18 +8,25 @@ public record OrderSnapshot(
         String marketId,
         String symbol,
         String exchange,
+        String exchangeLabel,
         String exchangeSymbol,
         String assetType,
         String side,
         String orderType,
         String timeInForce,
+        String exchangeOrderId,
+        String clientOrderId,
         BigDecimal quantity,
+        BigDecimal filledQuantity,
+        BigDecimal remainingQuantity,
         BigDecimal limitPrice,
-        BigDecimal referencePrice,
+        BigDecimal averageFillPrice,
         String status,
+        String cancelReason,
         String note,
         Instant createdAt,
         Instant updatedAt,
-        Instant canceledAt
+        Instant canceledAt,
+        Instant filledAt
 ) {
 }

@@ -1,9 +1,13 @@
 package com.fueledbychai.switchboard.controller;
 
 import com.fueledbychai.switchboard.api.SwitchboardSnapshot;
+import com.fueledbychai.switchboard.api.BrokerProfileSnapshot;
+import com.fueledbychai.switchboard.api.BrokerProfilesResponse;
+import com.fueledbychai.switchboard.api.BrokerProfileUpsertRequest;
 import com.fueledbychai.switchboard.api.InstrumentLookupOption;
 import com.fueledbychai.switchboard.api.MarketSnapshot;
 import com.fueledbychai.switchboard.api.MarketSubscriptionRequest;
+import com.fueledbychai.switchboard.api.OrderModifyRequest;
 import com.fueledbychai.switchboard.api.OrderSnapshot;
 import com.fueledbychai.switchboard.api.OrderTicketRequest;
 import com.fueledbychai.switchboard.api.PairSnapshot;
@@ -15,6 +19,7 @@ import com.fueledbychai.switchboard.model.SupportedAssetType;
 import com.fueledbychai.switchboard.model.SupportedExchange;
 import com.fueledbychai.switchboard.model.TimeInForce;
 import com.fueledbychai.switchboard.service.SwitchboardStateService;
+import com.fueledbychai.switchboard.service.BrokerProfileService;
 import com.fueledbychai.switchboard.service.MarketDataCatalogService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -23,6 +28,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -39,11 +45,14 @@ public class SwitchboardApiController {
 
     private final SwitchboardStateService switchboardStateService;
     private final MarketDataCatalogService marketDataCatalogService;
+    private final BrokerProfileService brokerProfileService;
 
     public SwitchboardApiController(SwitchboardStateService switchboardStateService,
-                                    MarketDataCatalogService marketDataCatalogService) {
+                                    MarketDataCatalogService marketDataCatalogService,
+                                    BrokerProfileService brokerProfileService) {
         this.switchboardStateService = switchboardStateService;
         this.marketDataCatalogService = marketDataCatalogService;
+        this.brokerProfileService = brokerProfileService;
     }
 
     @GetMapping("/snapshot")
@@ -93,6 +102,19 @@ public class SwitchboardApiController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void cancelOrder(@PathVariable String orderId) {
         switchboardStateService.cancelOrder(orderId);
+    }
+
+    @DeleteMapping("/orders/by-client/{exchangeName}/{clientOrderId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void cancelOrderByClientOrderId(@PathVariable String exchangeName,
+                                           @PathVariable String clientOrderId) {
+        switchboardStateService.cancelOrderByClientOrderId(exchangeName, clientOrderId);
+    }
+
+    @PostMapping("/orders/{orderId}")
+    public OrderSnapshot modifyOrder(@PathVariable String orderId,
+                                     @Valid @RequestBody OrderModifyRequest request) {
+        return switchboardStateService.modifyOrder(orderId, request);
     }
 
     @PostMapping("/pairs")
@@ -161,9 +183,26 @@ public class SwitchboardApiController {
                                 "value", value.name(),
                                 "label", value.displayName()))
                         .toList(),
-                "orderMode", "PAPER",
+                "orderMode", "LIVE",
                 "maxRows", switchboardStateService.maxRows()
         );
+    }
+
+    @GetMapping("/admin/broker/profiles")
+    public BrokerProfilesResponse brokerProfiles() {
+        return brokerProfileService.brokerProfilesResponse();
+    }
+
+    @PutMapping("/admin/broker/profiles/{exchangeName}")
+    public BrokerProfileSnapshot upsertBrokerProfile(@PathVariable String exchangeName,
+                                                     @Valid @RequestBody BrokerProfileUpsertRequest request) {
+        return brokerProfileService.upsertProfile(exchangeName, request);
+    }
+
+    @DeleteMapping("/admin/broker/profiles/{exchangeName}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteBrokerProfile(@PathVariable String exchangeName) {
+        brokerProfileService.deleteProfile(exchangeName);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

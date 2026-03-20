@@ -38,15 +38,29 @@ public class MarketDataCatalogService {
     private final Map<String, Map<String, Integer>> tickerCountsByExchange;
 
     public MarketDataCatalogService() {
-        this.supportedExchanges = discoverSupportedExchanges();
-        this.supportedAssetTypes = supportedExchanges.stream()
+        this.supportedExchanges = discoverSupportedExchangesStatic();
+        this.supportedAssetTypes = this.supportedExchanges.stream()
                 .flatMap(exchange -> exchange.supportedAssetTypes().stream())
                 .distinct()
                 .sorted(ASSET_TYPE_ORDER)
                 .toList();
-        this.exchangesByName = supportedExchanges.stream()
+        this.exchangesByName = this.supportedExchanges.stream()
                 .collect(Collectors.toUnmodifiableMap(SupportedExchange::name, exchange -> exchange));
-        this.tickerCountsByExchange = buildTickerCounts();
+        this.tickerCountsByExchange = buildTickerCounts(this.supportedExchanges);
+    }
+
+    public MarketDataCatalogService(List<SupportedExchange> supportedExchanges) {
+        this.supportedExchanges = List.copyOf(Objects.requireNonNull(supportedExchanges, "supportedExchanges is required").stream()
+                .sorted(EXCHANGE_ORDER)
+                .toList());
+        this.supportedAssetTypes = this.supportedExchanges.stream()
+                .flatMap(exchange -> exchange.supportedAssetTypes().stream())
+                .distinct()
+                .sorted(ASSET_TYPE_ORDER)
+                .toList();
+        this.exchangesByName = this.supportedExchanges.stream()
+                .collect(Collectors.toUnmodifiableMap(SupportedExchange::name, exchange -> exchange));
+        this.tickerCountsByExchange = emptyTickerCounts(this.supportedExchanges);
     }
 
     public List<SupportedExchange> supportedExchanges() {
@@ -107,18 +121,18 @@ public class MarketDataCatalogService {
         return exchange;
     }
 
-    private List<SupportedExchange> discoverSupportedExchanges() {
+    private static List<SupportedExchange> discoverSupportedExchangesStatic() {
         return Arrays.stream(Exchange.ALL_EXCHANGES)
                 .filter(Objects::nonNull)
                 .filter(QuoteEngine::isRegistered)
                 .filter(TickerRegistryFactory::isRegistered)
-                .map(this::discoverExchange)
+                .map(MarketDataCatalogService::discoverExchangeStatic)
                 .filter(exchange -> !exchange.supportedAssetTypes().isEmpty())
                 .sorted(EXCHANGE_ORDER)
                 .toList();
     }
 
-    private SupportedExchange discoverExchange(Exchange exchange) {
+    private static SupportedExchange discoverExchangeStatic(Exchange exchange) {
         ITickerRegistry registry = safeRegistry(exchange);
         List<SupportedAssetType> assetTypes = registry == null
                 ? List.of()
@@ -131,7 +145,7 @@ public class MarketDataCatalogService {
         );
     }
 
-    List<SupportedAssetType> supportedAssetTypes(ITickerRegistry registry) {
+    private static List<SupportedAssetType> supportedAssetTypes(ITickerRegistry registry) {
         LinkedHashSet<SupportedAssetType> assetTypes = new LinkedHashSet<>();
         for (InstrumentType instrumentType : InstrumentType.values()) {
             if (instrumentType == InstrumentType.NONE) {
@@ -152,9 +166,9 @@ public class MarketDataCatalogService {
                 .toList();
     }
 
-    private Map<String, Map<String, Integer>> buildTickerCounts() {
+    private Map<String, Map<String, Integer>> buildTickerCounts(List<SupportedExchange> exchanges) {
         Map<String, Map<String, Integer>> result = new LinkedHashMap<>();
-        for (SupportedExchange exchange : supportedExchanges) {
+        for (SupportedExchange exchange : exchanges) {
             ITickerRegistry registry = safeRegistry(exchange.exchange());
             if (registry == null) {
                 result.put(exchange.name(), Map.of());
@@ -175,7 +189,15 @@ public class MarketDataCatalogService {
         return Collections.unmodifiableMap(result);
     }
 
-    private ITickerRegistry safeRegistry(Exchange exchange) {
+    private Map<String, Map<String, Integer>> emptyTickerCounts(List<SupportedExchange> exchanges) {
+        Map<String, Map<String, Integer>> result = new LinkedHashMap<>();
+        for (SupportedExchange exchange : exchanges) {
+            result.put(exchange.name(), Map.of());
+        }
+        return Collections.unmodifiableMap(result);
+    }
+
+    private static ITickerRegistry safeRegistry(Exchange exchange) {
         try {
             return TickerRegistryFactory.getInstance(exchange);
         } catch (Exception e) {
@@ -184,14 +206,14 @@ public class MarketDataCatalogService {
         }
     }
 
-    private String displayName(Exchange exchange) {
+    private static String displayName(Exchange exchange) {
         return Arrays.stream(exchange.getExchangeName().split("_"))
                 .filter(token -> !token.isBlank())
-                .map(this::displayToken)
+                .map(MarketDataCatalogService::displayToken)
                 .collect(Collectors.joining(" "));
     }
 
-    private String displayToken(String token) {
+    private static String displayToken(String token) {
         String upper = token.toUpperCase(Locale.ROOT);
         return switch (upper) {
             case "OKX" -> "OKX";
