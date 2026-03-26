@@ -27,7 +27,7 @@ switchboard:
   history-minutes: 10
   max-rows: 50
   proxy:
-    enabled: true
+    enabled: false
     host: "localhost"
     port: 1080
   broker-refresh-interval-ms: 5000
