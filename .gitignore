@@ -1,3 +1,8 @@
 /.history
 /.vscode
 /target
+/data/*
+/.claude
+data/switchboard-db.mv.db
+data/switchboard-db.lock.db
+data/switchboard-db.mv.db

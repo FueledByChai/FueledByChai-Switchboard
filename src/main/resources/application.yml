@@ -14,7 +14,13 @@ spring:
     cache: false
 
 server:
+  port: 8181
   shutdown: graceful
+  servlet:
+    session:
+      timeout: 365d
+      cookie:
+        name: SWITCHBOARD_SESSION
 
 switchboard:
   broadcast-interval-ms: 100
@@ -27,7 +33,7 @@ switchboard:
   broker-refresh-interval-ms: 5000
   security:
     bootstrap-username: admin
-    bootstrap-password: ""
+    bootstrap-password: roadrunner
   secrets:
     master-key: ""
     master-key-path: ./data/master.key

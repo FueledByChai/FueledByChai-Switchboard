@@ -54,14 +54,16 @@
                 </div>
             </div>
             <div class="topbar-actions">
-                <label class="theme-picker" for="themeSelect">
-                    <span>L&amp;F</span>
-                    <select id="themeSelect" class="theme-select" aria-label="Look and feel"></select>
-                </label>
-                <button type="button" id="openProfilesBtn" class="secondary-btn compact-btn">Exchange Profiles</button>
+                <div class="theme-picker">
+                    <button type="button" id="themePickerButton" class="theme-select theme-picker-trigger compact-btn header-action-btn" aria-label="Look and feel" aria-haspopup="listbox" aria-expanded="false">
+                        <span id="themePickerLabel" class="theme-picker-value">Switchboard Dark</span>
+                    </button>
+                    <div id="themePickerMenu" class="theme-picker-menu hidden" role="listbox" aria-label="Look and feel"></div>
+                </div>
+                <button type="button" id="openProfilesBtn" class="secondary-btn compact-btn header-action-btn">Exchange Profiles</button>
                 <form th:action="@{/logout}" method="post" class="logout-form">
                     <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-                    <button type="submit" class="secondary-btn compact-btn">Logout</button>
+                    <button type="submit" class="secondary-btn compact-btn header-action-btn">Logout</button>
                 </form>
             </div>
         </div>
@@ -73,11 +75,11 @@
                 <div>
                     <p class="panel-kicker">Watchlist</p>
                     <h2>Market Monitor</h2>
-                    <p>Type in the ticker column and press Return to resolve the route, venue, and asset class.</p>
+                    <p>Type in the ticker column and press Return to resolve the exchange and asset class. Press Return on an empty row to browse everything.</p>
                 </div>
                 <div class="action-cluster compact-actions">
-                    <button type="button" id="openLatencyBtn" class="secondary-btn compact-btn">L1 Latency</button>
-                    <div class="mode-pill" id="orderModePill">Paper Gateway</div>
+                    <button type="button" id="openSnapshotQuoteBtn" class="secondary-btn compact-btn header-action-btn">Snapshot Quote</button>
+                    <button type="button" id="openLatencyBtn" class="secondary-btn compact-btn header-action-btn">L1 Latency</button>
                 </div>
             </div>
 
@@ -87,14 +89,15 @@
                     <tr>
                         <th>Ticker</th>
                         <th>Asset</th>
-                        <th>Route</th>
+                        <th>Exchange</th>
                         <th>Bid</th>
                         <th>Ask</th>
                         <th>Spread</th>
                         <th>Last</th>
+                        <th>Day %</th>
                         <th>Volume</th>
                         <th>Fund %</th>
-                        <th>Actions</th>
+                        <th class="watchlist-remove-head"></th>
                     </tr>
                     </thead>
                     <tbody id="marketRows"></tbody>
@@ -107,13 +110,13 @@
                 <div>
                     <p class="panel-kicker">Order Entry</p>
                     <h2>Ticket</h2>
-                    <p>Select a row or click Buy or Sell from the monitor to stage an order.</p>
+                    <p>Select a row from the monitor to stage an order.</p>
                 </div>
             </div>
 
             <div id="ticketEmpty" class="ticket-empty">
                 <strong>No market selected</strong>
-                <p>Choose a watchlist row to open an order ticket for that route.</p>
+                <p>Choose a watchlist row to open an order ticket for that exchange.</p>
             </div>
 
             <div id="ticketShell" class="ticket-shell hidden">
@@ -150,11 +153,23 @@
 
                     <label>
                         <span>Order Type</span>
-                        <select id="orderTypeSelect" name="orderType" required></select>
+                        <div class="custom-select-shell" data-custom-select-shell="orderTypeSelect">
+                            <select id="orderTypeSelect" name="orderType" required data-custom-select class="custom-select-native"></select>
+                            <button type="button" class="custom-select-trigger" data-custom-select-trigger="orderTypeSelect" aria-haspopup="listbox" aria-expanded="false" aria-controls="orderTypeSelectMenu">
+                                <span class="custom-select-value" data-custom-select-value="orderTypeSelect"></span>
+                            </button>
+                            <div id="orderTypeSelectMenu" class="custom-select-menu hidden" data-custom-select-menu="orderTypeSelect" role="listbox" aria-label="Order Type"></div>
+                        </div>
                     </label>
                     <label>
                         <span>Time In Force</span>
-                        <select id="timeInForceSelect" name="timeInForce" required></select>
+                        <div class="custom-select-shell" data-custom-select-shell="timeInForceSelect">
+                            <select id="timeInForceSelect" name="timeInForce" required data-custom-select class="custom-select-native"></select>
+                            <button type="button" class="custom-select-trigger" data-custom-select-trigger="timeInForceSelect" aria-haspopup="listbox" aria-expanded="false" aria-controls="timeInForceSelectMenu">
+                                <span class="custom-select-value" data-custom-select-value="timeInForceSelect"></span>
+                            </button>
+                            <div id="timeInForceSelectMenu" class="custom-select-menu hidden" data-custom-select-menu="timeInForceSelect" role="listbox" aria-label="Time In Force"></div>
+                        </div>
                     </label>
                     <label>
                         <span>Client Order ID</span>
@@ -209,7 +224,7 @@
                     <tr>
                         <th>Time</th>
                         <th>Symbol</th>
-                        <th>Route</th>
+                        <th>Exchange</th>
                         <th>Client ID</th>
                         <th>Side</th>
                         <th>Type</th>
@@ -337,9 +352,39 @@
             <div>
                 <p class="panel-kicker">Instrument Lookup</p>
                 <h2 id="instrumentDialogTitle">Resolve Symbol</h2>
-                <p id="instrumentDialogSubtitle">Choose the route and asset class for this watchlist row.</p>
+                <p id="instrumentDialogSubtitle">Choose the exchange and asset class for this watchlist row.</p>
             </div>
             <button type="button" id="closeInstrumentDialogButton" class="icon-btn dialog-close" aria-label="Close instrument lookup">×</button>
+        </div>
+
+        <div class="instrument-picker-controls">
+            <label class="instrument-picker-query">
+                <span>Symbol</span>
+                <div class="picker-search-shell">
+                    <input id="instrumentSearchInput" type="text" placeholder="Leave blank to show all tickers" autocomplete="off" autocapitalize="characters" spellcheck="false">
+                    <button type="button" id="clearInstrumentSearchButton" class="secondary-btn compact-btn picker-clear-btn">Clear</button>
+                </div>
+            </label>
+            <label class="instrument-picker-filter">
+                <span>Exchange</span>
+                <div class="custom-select-shell" data-custom-select-shell="instrumentExchangeFilter">
+                    <select id="instrumentExchangeFilter" data-custom-select class="custom-select-native"></select>
+                    <button type="button" class="custom-select-trigger" data-custom-select-trigger="instrumentExchangeFilter" aria-haspopup="listbox" aria-expanded="false" aria-controls="instrumentExchangeFilterMenu">
+                        <span class="custom-select-value" data-custom-select-value="instrumentExchangeFilter"></span>
+                    </button>
+                    <div id="instrumentExchangeFilterMenu" class="custom-select-menu hidden" data-custom-select-menu="instrumentExchangeFilter" role="listbox" aria-label="Exchange"></div>
+                </div>
+            </label>
+            <label class="instrument-picker-filter">
+                <span>Asset Type</span>
+                <div class="custom-select-shell" data-custom-select-shell="instrumentAssetFilter">
+                    <select id="instrumentAssetFilter" data-custom-select class="custom-select-native"></select>
+                    <button type="button" class="custom-select-trigger" data-custom-select-trigger="instrumentAssetFilter" aria-haspopup="listbox" aria-expanded="false" aria-controls="instrumentAssetFilterMenu">
+                        <span class="custom-select-value" data-custom-select-value="instrumentAssetFilter"></span>
+                    </button>
+                    <div id="instrumentAssetFilterMenu" class="custom-select-menu hidden" data-custom-select-menu="instrumentAssetFilter" role="listbox" aria-label="Asset Type"></div>
+                </div>
+            </label>
         </div>
 
         <div class="table-wrap picker-wrap">
@@ -347,9 +392,8 @@
                 <thead>
                 <tr>
                     <th>Symbol</th>
-                    <th>Asset</th>
-                    <th>Route</th>
-                    <th>Exchange Symbol</th>
+                    <th>Asset Type</th>
+                    <th>Exchange</th>
                     <th>Details</th>
                 </tr>
                 </thead>
@@ -468,10 +512,16 @@
 
                 <label>
                     <span>Environment</span>
-                    <select id="profileEnvironmentSelect" required>
-                        <option value="MAINNET">Mainnet</option>
-                        <option value="TESTNET">Testnet</option>
-                    </select>
+                    <div class="custom-select-shell" data-custom-select-shell="profileEnvironmentSelect">
+                        <select id="profileEnvironmentSelect" required data-custom-select class="custom-select-native">
+                            <option value="MAINNET">Mainnet</option>
+                            <option value="TESTNET">Testnet</option>
+                        </select>
+                        <button type="button" class="custom-select-trigger" data-custom-select-trigger="profileEnvironmentSelect" aria-haspopup="listbox" aria-expanded="false" aria-controls="profileEnvironmentSelectMenu">
+                            <span class="custom-select-value" data-custom-select-value="profileEnvironmentSelect"></span>
+                        </button>
+                        <div id="profileEnvironmentSelectMenu" class="custom-select-menu hidden" data-custom-select-menu="profileEnvironmentSelect" role="listbox" aria-label="Environment"></div>
+                    </div>
                 </label>
 
                 <div id="profileFieldContainer" class="profile-field-grid"></div>
@@ -481,6 +531,129 @@
                     <button type="button" id="deleteProfileButton" class="secondary-btn">Delete Profile</button>
                 </div>
             </form>
+        </div>
+    </section>
+</div>
+
+<div id="snapshotQuoteDialog" class="instrument-dialog hidden" aria-hidden="true">
+    <div class="instrument-dialog-backdrop" data-action="close-snapshot-quote"></div>
+    <section id="snapshotQuoteDialogPanel" class="instrument-dialog-panel snapshot-quote-dialog-panel" role="dialog" aria-modal="true" aria-labelledby="snapshotQuoteDialogTitle" tabindex="-1">
+        <div class="instrument-dialog-head">
+            <div>
+                <p class="panel-kicker">Market Data</p>
+                <h2 id="snapshotQuoteDialogTitle">Snapshot Quote</h2>
+                <p>Search for an instrument and request a one-shot Level 1 quote snapshot.</p>
+            </div>
+            <button type="button" id="closeSnapshotQuoteDialogButton" class="icon-btn dialog-close" aria-label="Close snapshot quote dialog">×</button>
+        </div>
+
+        <div class="instrument-picker-controls">
+            <label class="instrument-picker-query">
+                <span>Symbol</span>
+                <div class="picker-search-shell">
+                    <input id="snapshotQuoteSearchInput" type="text" placeholder="Leave blank to show all tickers" autocomplete="off" autocapitalize="characters" spellcheck="false">
+                    <button type="button" id="clearSnapshotQuoteSearchBtn" class="secondary-btn compact-btn picker-clear-btn">Clear</button>
+                </div>
+            </label>
+            <label class="instrument-picker-filter">
+                <span>Exchange</span>
+                <div class="custom-select-shell" data-custom-select-shell="snapshotQuoteExchangeFilter">
+                    <select id="snapshotQuoteExchangeFilter" data-custom-select class="custom-select-native"></select>
+                    <button type="button" class="custom-select-trigger" data-custom-select-trigger="snapshotQuoteExchangeFilter" aria-haspopup="listbox" aria-expanded="false" aria-controls="snapshotQuoteExchangeFilterMenu">
+                        <span class="custom-select-value" data-custom-select-value="snapshotQuoteExchangeFilter"></span>
+                    </button>
+                    <div id="snapshotQuoteExchangeFilterMenu" class="custom-select-menu hidden" data-custom-select-menu="snapshotQuoteExchangeFilter" role="listbox" aria-label="Exchange"></div>
+                </div>
+            </label>
+            <label class="instrument-picker-filter">
+                <span>Asset Type</span>
+                <div class="custom-select-shell" data-custom-select-shell="snapshotQuoteAssetFilter">
+                    <select id="snapshotQuoteAssetFilter" data-custom-select class="custom-select-native"></select>
+                    <button type="button" class="custom-select-trigger" data-custom-select-trigger="snapshotQuoteAssetFilter" aria-haspopup="listbox" aria-expanded="false" aria-controls="snapshotQuoteAssetFilterMenu">
+                        <span class="custom-select-value" data-custom-select-value="snapshotQuoteAssetFilter"></span>
+                    </button>
+                    <div id="snapshotQuoteAssetFilterMenu" class="custom-select-menu hidden" data-custom-select-menu="snapshotQuoteAssetFilter" role="listbox" aria-label="Asset Type"></div>
+                </div>
+            </label>
+        </div>
+
+        <div id="snapshotQuoteCandidatesWrap" class="table-wrap picker-wrap">
+            <table class="workstation-table picker-table">
+                <thead>
+                <tr>
+                    <th>Symbol</th>
+                    <th>Asset Type</th>
+                    <th>Exchange</th>
+                    <th>Details</th>
+                </tr>
+                </thead>
+                <tbody id="snapshotQuoteCandidateRows"></tbody>
+            </table>
+        </div>
+
+        <div id="snapshotQuoteResultPanel" class="snapshot-quote-result hidden">
+            <div class="snapshot-quote-header">
+                <strong id="snapshotQuoteSymbol">--</strong>
+                <span id="snapshotQuoteExchangeLabel">--</span>
+                <span class="tag" id="snapshotQuoteAssetLabel">--</span>
+            </div>
+            <div class="snapshot-quote-grid">
+                <article>
+                    <span>Bid</span>
+                    <strong id="snapshotQuoteBid">--</strong>
+                </article>
+                <article>
+                    <span>Bid Size</span>
+                    <strong id="snapshotQuoteBidSize">--</strong>
+                </article>
+                <article>
+                    <span>Ask</span>
+                    <strong id="snapshotQuoteAsk">--</strong>
+                </article>
+                <article>
+                    <span>Ask Size</span>
+                    <strong id="snapshotQuoteAskSize">--</strong>
+                </article>
+                <article>
+                    <span>Last</span>
+                    <strong id="snapshotQuoteLast">--</strong>
+                </article>
+                <article>
+                    <span>Last Size</span>
+                    <strong id="snapshotQuoteLastSize">--</strong>
+                </article>
+                <article>
+                    <span>Volume</span>
+                    <strong id="snapshotQuoteVolume">--</strong>
+                </article>
+                <article>
+                    <span>Open</span>
+                    <strong id="snapshotQuoteOpen">--</strong>
+                </article>
+                <article>
+                    <span>Close</span>
+                    <strong id="snapshotQuoteClose">--</strong>
+                </article>
+                <article>
+                    <span>Mark</span>
+                    <strong id="snapshotQuoteMark">--</strong>
+                </article>
+            </div>
+            <div class="snapshot-quote-meta">
+                <span>Exchange Time: <strong id="snapshotQuoteTime">--</strong></span>
+                <span>Requested: <strong id="snapshotQuoteRequestedAt">--</strong></span>
+            </div>
+        </div>
+
+        <div id="snapshotQuoteLoading" class="snapshot-quote-loading hidden">
+            <span>Requesting quote...</span>
+        </div>
+
+        <div id="snapshotQuoteError" class="snapshot-quote-error hidden"></div>
+
+        <div class="instrument-dialog-actions">
+            <button type="button" id="snapshotQuoteCloseButton" class="secondary-btn">Close</button>
+            <button type="button" id="requestSnapshotQuoteBtn" class="primary-btn" disabled>Request Quote</button>
         </div>
     </section>
 </div>

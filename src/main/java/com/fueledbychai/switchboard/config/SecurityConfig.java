@@ -33,8 +33,11 @@ public class SecurityConfig {
                         .logoutRequestMatcher(new AntPathRequestMatcher("/logout", HttpMethod.POST.name()))
                         .logoutSuccessUrl("/login?logout")
                         .permitAll())
-                .csrf(csrf -> csrf
-                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()))
+                .csrf(csrf -> {
+                    CookieCsrfTokenRepository csrfRepo = CookieCsrfTokenRepository.withHttpOnlyFalse();
+                    csrfRepo.setCookieName("SWITCHBOARD_CSRF");
+                    csrf.csrfTokenRepository(csrfRepo);
+                })
                 .exceptionHandling(handling -> handling
                         .defaultAuthenticationEntryPointFor(
                                 (request, response, authException) -> response.sendError(HttpServletResponse.SC_UNAUTHORIZED),

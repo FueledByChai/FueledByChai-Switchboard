@@ -10,6 +10,8 @@ import com.fueledbychai.switchboard.api.MarketSubscriptionRequest;
 import com.fueledbychai.switchboard.api.OrderModifyRequest;
 import com.fueledbychai.switchboard.api.OrderSnapshot;
 import com.fueledbychai.switchboard.api.OrderTicketRequest;
+import com.fueledbychai.switchboard.api.SnapshotQuoteRequest;
+import com.fueledbychai.switchboard.api.SnapshotQuoteResponse;
 import com.fueledbychai.switchboard.api.PairSnapshot;
 import com.fueledbychai.switchboard.api.PairSubscriptionRequest;
 import com.fueledbychai.switchboard.api.PriceHistoryPoint;
@@ -66,8 +68,10 @@ public class SwitchboardApiController {
     }
 
     @GetMapping("/instruments")
-    public List<InstrumentLookupOption> instruments(@RequestParam("symbol") String symbol) {
-        return switchboardStateService.instrumentLookup(symbol);
+    public List<InstrumentLookupOption> instruments(@RequestParam(required = false) String symbol,
+                                                    @RequestParam(required = false) String exchange,
+                                                    @RequestParam(required = false) String assetType) {
+        return switchboardStateService.instrumentLookup(symbol, exchange, assetType);
     }
 
     @PostMapping("/markets")
@@ -80,6 +84,11 @@ public class SwitchboardApiController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void removeMarket(@PathVariable String marketId) {
         switchboardStateService.removeMarket(marketId);
+    }
+
+    @PostMapping("/snapshot-quote")
+    public SnapshotQuoteResponse snapshotQuote(@Valid @RequestBody SnapshotQuoteRequest request) {
+        return switchboardStateService.requestSnapshotQuote(request);
     }
 
     @GetMapping("/history/{marketId}")

@@ -13,6 +13,7 @@ public record MarketSnapshot(
         BigDecimal bid,
         BigDecimal ask,
         BigDecimal last,
+        BigDecimal dailyChangePercent,
         BigDecimal volume,
         BigDecimal fundingRateApr,
         BigDecimal fundingRateBpsPerHour,

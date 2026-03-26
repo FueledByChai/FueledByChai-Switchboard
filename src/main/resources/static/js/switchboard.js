@@ -5,10 +5,11 @@
     const DEFAULT_THEME_ID = "switchboard-dark";
     const THEMES = Object.freeze([
         {id: "switchboard-dark", label: "Switchboard Dark"},
-        {id: "bloomberg-inspired", label: "Bloomberg Inspired"},
+        {id: "bloomberg-inspired", label: "Bloomberg Terminal"},
         {id: "tradingview-midnight", label: "TradingView Midnight"},
         {id: "reuters-eikon", label: "Reuters Eikon"},
         {id: "tws-mosaic", label: "TWS Mosaic"},
+        {id: "tws-classic", label: "TWS Classic"},
         {id: "cqg-green", label: "CQG Green"},
         {id: "sierra-chart", label: "Sierra Chart"},
         {id: "nasdaq-depth", label: "Nasdaq Depth"},
@@ -37,6 +38,7 @@
         tickDirectionByField: new Map(),
         precisionByMarket: new Map(),
         marketDrafts: new Map(),
+        focusedDraftRow: null,
         serverTime: null,
         ws: null,
         reconnectTimer: null,
@@ -44,7 +46,10 @@
         marketLayoutSignature: "",
         orderRenderSignature: "",
         themeId: DEFAULT_THEME_ID,
+        themePickerOpen: false,
+        openCustomSelectId: null,
         instrumentPicker: defaultInstrumentPicker(),
+        instrumentPickerTimer: null,
         catalogData: null,
         csrfToken: document.querySelector('meta[name="_csrf"]')?.content || "",
         csrfHeader: document.querySelector('meta[name="_csrf_header"]')?.content || "X-CSRF-TOKEN"
@@ -54,7 +59,9 @@
         connectionBadge: document.getElementById("connectionBadge"),
         serverClock: document.getElementById("serverClock"),
         coverageCount: document.getElementById("coverageCount"),
-        themeSelect: document.getElementById("themeSelect"),
+        themePickerButton: document.getElementById("themePickerButton"),
+        themePickerLabel: document.getElementById("themePickerLabel"),
+        themePickerMenu: document.getElementById("themePickerMenu"),
         orderModePill: document.getElementById("orderModePill"),
         toast: document.getElementById("toast"),
         marketRows: document.getElementById("marketRows"),
@@ -90,11 +97,45 @@
         instrumentDialogPanel: document.getElementById("instrumentDialogPanel"),
         instrumentDialogTitle: document.getElementById("instrumentDialogTitle"),
         instrumentDialogSubtitle: document.getElementById("instrumentDialogSubtitle"),
+        instrumentSearchInput: document.getElementById("instrumentSearchInput"),
+        clearInstrumentSearchButton: document.getElementById("clearInstrumentSearchButton"),
+        instrumentExchangeFilter: document.getElementById("instrumentExchangeFilter"),
+        instrumentAssetFilter: document.getElementById("instrumentAssetFilter"),
         instrumentDialogRows: document.getElementById("instrumentDialogRows"),
         closeInstrumentDialogButton: document.getElementById("closeInstrumentDialogButton"),
         cancelInstrumentButton: document.getElementById("cancelInstrumentButton"),
         confirmInstrumentButton: document.getElementById("confirmInstrumentButton"),
         openCatalogBtn: document.getElementById("openCatalogBtn"),
+        openSnapshotQuoteBtn: document.getElementById("openSnapshotQuoteBtn"),
+        snapshotQuoteDialog: document.getElementById("snapshotQuoteDialog"),
+        snapshotQuoteDialogPanel: document.getElementById("snapshotQuoteDialogPanel"),
+        closeSnapshotQuoteDialogButton: document.getElementById("closeSnapshotQuoteDialogButton"),
+        snapshotQuoteCloseButton: document.getElementById("snapshotQuoteCloseButton"),
+        snapshotQuoteSearchInput: document.getElementById("snapshotQuoteSearchInput"),
+        clearSnapshotQuoteSearchBtn: document.getElementById("clearSnapshotQuoteSearchBtn"),
+        snapshotQuoteExchangeFilter: document.getElementById("snapshotQuoteExchangeFilter"),
+        snapshotQuoteAssetFilter: document.getElementById("snapshotQuoteAssetFilter"),
+        snapshotQuoteCandidateRows: document.getElementById("snapshotQuoteCandidateRows"),
+        requestSnapshotQuoteBtn: document.getElementById("requestSnapshotQuoteBtn"),
+        snapshotQuoteCandidatesWrap: document.getElementById("snapshotQuoteCandidatesWrap"),
+        snapshotQuoteResultPanel: document.getElementById("snapshotQuoteResultPanel"),
+        snapshotQuoteLoading: document.getElementById("snapshotQuoteLoading"),
+        snapshotQuoteError: document.getElementById("snapshotQuoteError"),
+        snapshotQuoteSymbol: document.getElementById("snapshotQuoteSymbol"),
+        snapshotQuoteExchangeLabel: document.getElementById("snapshotQuoteExchangeLabel"),
+        snapshotQuoteAssetLabel: document.getElementById("snapshotQuoteAssetLabel"),
+        snapshotQuoteBid: document.getElementById("snapshotQuoteBid"),
+        snapshotQuoteBidSize: document.getElementById("snapshotQuoteBidSize"),
+        snapshotQuoteAsk: document.getElementById("snapshotQuoteAsk"),
+        snapshotQuoteAskSize: document.getElementById("snapshotQuoteAskSize"),
+        snapshotQuoteLast: document.getElementById("snapshotQuoteLast"),
+        snapshotQuoteLastSize: document.getElementById("snapshotQuoteLastSize"),
+        snapshotQuoteVolume: document.getElementById("snapshotQuoteVolume"),
+        snapshotQuoteOpen: document.getElementById("snapshotQuoteOpen"),
+        snapshotQuoteClose: document.getElementById("snapshotQuoteClose"),
+        snapshotQuoteMark: document.getElementById("snapshotQuoteMark"),
+        snapshotQuoteTime: document.getElementById("snapshotQuoteTime"),
+        snapshotQuoteRequestedAt: document.getElementById("snapshotQuoteRequestedAt"),
         openLatencyBtn: document.getElementById("openLatencyBtn"),
         catalogDialog: document.getElementById("catalogDialog"),
         catalogDialogPanel: document.getElementById("catalogDialogPanel"),
@@ -124,10 +165,12 @@
         saveProfileButton: document.getElementById("saveProfileButton"),
         deleteProfileButton: document.getElementById("deleteProfileButton")
     };
+    const customSelects = new Map();
 
     init();
 
     function init() {
+        initializeCustomSelects();
         hydrateTheme();
         hydrateMetadata();
         bindEvents();
@@ -167,22 +210,22 @@
             open: false,
             rowIndex: null,
             query: "",
+            exchangeFilter: "",
+            assetTypeFilter: "",
+            existingMarketId: null,
             candidates: [],
             selectedKeys: new Set(),
             focusedIndex: null,
             anchorIndex: null,
             loading: false,
             submitting: false,
+            fetchId: 0,
             error: ""
         };
     }
 
     function hydrateTheme() {
-        if (dom.themeSelect) {
-            dom.themeSelect.innerHTML = THEMES.map(theme => `
-                <option value="${escapeAttribute(theme.id)}">${escapeHtml(theme.label)}</option>
-            `).join("");
-        }
+        renderThemePickerOptions();
         applyTheme(document.documentElement.dataset.theme || loadStoredTheme(), false);
     }
 
@@ -198,9 +241,10 @@
         const resolvedTheme = resolveTheme(themeId);
         state.themeId = resolvedTheme;
         document.documentElement.dataset.theme = resolvedTheme;
-        if (dom.themeSelect && dom.themeSelect.value !== resolvedTheme) {
-            dom.themeSelect.value = resolvedTheme;
+        if (dom.themePickerLabel) {
+            dom.themePickerLabel.textContent = themeLabelFor(resolvedTheme);
         }
+        syncThemePickerSelection();
         if (persist) {
             try {
                 localStorage.setItem(THEME_STORAGE_KEY, resolvedTheme);
@@ -214,10 +258,197 @@
         return THEMES.some(theme => theme.id === themeId) ? themeId : DEFAULT_THEME_ID;
     }
 
+    function renderThemePickerOptions() {
+        if (!dom.themePickerMenu) {
+            return;
+        }
+        dom.themePickerMenu.innerHTML = THEMES.map(theme => `
+            <button
+                type="button"
+                class="theme-option"
+                data-theme-id="${escapeAttribute(theme.id)}"
+                role="option"
+                aria-selected="${theme.id === state.themeId ? "true" : "false"}">
+                ${escapeHtml(theme.label)}
+            </button>
+        `).join("");
+        syncThemePickerSelection();
+    }
+
+    function initializeCustomSelects() {
+        document.querySelectorAll("select[data-custom-select]").forEach(select => {
+            const shell = select.closest(".custom-select-shell");
+            const trigger = shell?.querySelector(`[data-custom-select-trigger="${select.id}"]`);
+            const value = shell?.querySelector(`[data-custom-select-value="${select.id}"]`);
+            const menu = shell?.querySelector(`[data-custom-select-menu="${select.id}"]`);
+            if (!shell || !trigger || !value || !menu || !select.id) {
+                return;
+            }
+            const descriptor = {select, shell, trigger, value, menu};
+            customSelects.set(select.id, descriptor);
+            trigger.addEventListener("click", onCustomSelectTriggerClick);
+            menu.addEventListener("click", onCustomSelectMenuClick);
+            select.addEventListener("change", () => syncCustomSelect(select));
+            renderCustomSelectOptions(select);
+        });
+    }
+
+    function renderCustomSelectOptions(select) {
+        const descriptor = customSelects.get(select?.id);
+        if (!descriptor) {
+            return;
+        }
+        descriptor.menu.innerHTML = Array.from(select.options).map(option => `
+            <button
+                type="button"
+                class="custom-select-option"
+                data-select-id="${escapeAttribute(select.id)}"
+                data-value="${escapeAttribute(option.value)}"
+                role="option"
+                aria-selected="${option.selected ? "true" : "false"}">
+                ${escapeHtml(option.textContent || option.label || option.value)}
+            </button>
+        `).join("");
+        syncCustomSelect(select);
+    }
+
+    function syncCustomSelect(select) {
+        const descriptor = customSelects.get(select?.id);
+        if (!descriptor) {
+            return;
+        }
+        const selectedOption = select.selectedOptions?.[0] || select.options[select.selectedIndex] || select.options[0];
+        descriptor.value.textContent = selectedOption?.textContent || select.dataset.customSelectPlaceholder || "";
+        const isOpen = state.openCustomSelectId === select.id;
+        descriptor.trigger.disabled = !!select.disabled;
+        descriptor.trigger.setAttribute("aria-expanded", String(isOpen));
+        descriptor.trigger.setAttribute("aria-disabled", String(!!select.disabled));
+        descriptor.menu.classList.toggle("hidden", !isOpen);
+        descriptor.shell.classList.toggle("is-disabled", !!select.disabled);
+        descriptor.menu.querySelectorAll(".custom-select-option").forEach(option => {
+            const selected = option.dataset.value === select.value;
+            option.classList.toggle("selected", selected);
+            option.setAttribute("aria-selected", String(selected));
+        });
+    }
+
+    function syncAllCustomSelects() {
+        customSelects.forEach(({select}) => syncCustomSelect(select));
+    }
+
+    function closeCustomSelects() {
+        if (state.openCustomSelectId === null) {
+            return;
+        }
+        state.openCustomSelectId = null;
+        syncAllCustomSelects();
+    }
+
+    function toggleCustomSelect(selectId, forceOpen) {
+        const descriptor = customSelects.get(selectId);
+        if (!descriptor || descriptor.select.disabled) {
+            return;
+        }
+        const nextOpen = typeof forceOpen === "boolean"
+            ? forceOpen
+            : state.openCustomSelectId !== selectId;
+        state.openCustomSelectId = nextOpen ? selectId : null;
+        syncAllCustomSelects();
+    }
+
+    function setSelectValue(select, value) {
+        if (!select) {
+            return;
+        }
+        select.value = value ?? "";
+        syncCustomSelect(select);
+    }
+
+    function onCustomSelectTriggerClick(event) {
+        const selectId = event.currentTarget?.dataset?.customSelectTrigger;
+        if (!selectId) {
+            return;
+        }
+        event.preventDefault();
+        toggleThemePicker(false);
+        toggleCustomSelect(selectId);
+    }
+
+    function onCustomSelectMenuClick(event) {
+        const option = event.target.closest(".custom-select-option[data-select-id][data-value]");
+        if (!option) {
+            return;
+        }
+        const descriptor = customSelects.get(option.dataset.selectId);
+        if (!descriptor) {
+            return;
+        }
+        if (descriptor.select.value !== option.dataset.value) {
+            descriptor.select.value = option.dataset.value;
+            descriptor.select.dispatchEvent(new Event("change", {bubbles: true}));
+        }
+        toggleCustomSelect(option.dataset.selectId, false);
+        descriptor.trigger.focus({preventScroll: true});
+    }
+
+    function syncThemePickerSelection() {
+        if (dom.themePickerButton) {
+            dom.themePickerButton.setAttribute("aria-expanded", String(state.themePickerOpen));
+        }
+        if (!dom.themePickerMenu) {
+            return;
+        }
+        dom.themePickerMenu.classList.toggle("hidden", !state.themePickerOpen);
+        dom.themePickerMenu.querySelectorAll(".theme-option").forEach(option => {
+            const selected = option.dataset.themeId === state.themeId;
+            option.classList.toggle("selected", selected);
+            option.setAttribute("aria-selected", String(selected));
+        });
+    }
+
+    function themeLabelFor(themeId) {
+        return THEMES.find(theme => theme.id === themeId)?.label || THEMES[0].label;
+    }
+
+    function toggleThemePicker(forceOpen) {
+        const nextOpen = typeof forceOpen === "boolean" ? forceOpen : !state.themePickerOpen;
+        if (state.themePickerOpen === nextOpen) {
+            return;
+        }
+        state.themePickerOpen = nextOpen;
+        syncThemePickerSelection();
+    }
+
+    function onThemePickerButtonClick(event) {
+        event.preventDefault();
+        closeCustomSelects();
+        toggleThemePicker();
+    }
+
+    function onThemePickerMenuClick(event) {
+        const option = event.target.closest(".theme-option[data-theme-id]");
+        if (!option) {
+            return;
+        }
+        applyTheme(option.dataset.themeId, true);
+        toggleThemePicker(false);
+        dom.themePickerButton?.focus({preventScroll: true});
+    }
+
+    function onDocumentClick(event) {
+        if (event.target.closest(".theme-picker") || event.target.closest(".custom-select-shell")) {
+            return;
+        }
+        toggleThemePicker(false);
+        closeCustomSelects();
+    }
+
     function bindEvents() {
         dom.marketRows.addEventListener("click", onMarketTableClick);
         dom.marketRows.addEventListener("input", onMarketDraftInput);
         dom.marketRows.addEventListener("keydown", onMarketDraftKeyDown);
+        dom.marketRows.addEventListener("focusin", onMarketTableFocusIn);
+        dom.marketRows.addEventListener("focusout", onMarketTableFocusOut);
         dom.orderForm.addEventListener("submit", onOrderSubmit);
         dom.orderRows.addEventListener("click", onOrderTableClick);
         dom.clearOrderEditButton.addEventListener("click", clearOrderEdit);
@@ -225,6 +456,11 @@
         dom.closeInstrumentDialogButton.addEventListener("click", closeInstrumentDialog);
         dom.cancelInstrumentButton.addEventListener("click", closeInstrumentDialog);
         dom.confirmInstrumentButton.addEventListener("click", confirmInstrumentSelection);
+        dom.instrumentSearchInput.addEventListener("input", onInstrumentSearchInput);
+        dom.instrumentSearchInput.addEventListener("keydown", onInstrumentSearchKeyDown);
+        dom.clearInstrumentSearchButton.addEventListener("click", clearInstrumentSearch);
+        dom.instrumentExchangeFilter.addEventListener("change", onInstrumentFilterChange);
+        dom.instrumentAssetFilter.addEventListener("change", onInstrumentFilterChange);
         dom.instrumentDialogRows.addEventListener("click", onInstrumentPickerRowClick);
         dom.instrumentDialogRows.addEventListener("dblclick", onInstrumentPickerRowDoubleClick);
         dom.openCatalogBtn.addEventListener("click", openCatalogDialog);
@@ -233,6 +469,18 @@
         dom.catalogDialog.addEventListener("click", onCatalogDialogClick);
         dom.catalogDialogRows.addEventListener("click", onCatalogRowClick);
         dom.backFromDrilldownBtn.addEventListener("click", closeCatalogDrilldown);
+        dom.openSnapshotQuoteBtn.addEventListener("click", openSnapshotQuoteDialog);
+        dom.closeSnapshotQuoteDialogButton.addEventListener("click", closeSnapshotQuoteDialog);
+        dom.snapshotQuoteCloseButton.addEventListener("click", closeSnapshotQuoteDialog);
+        dom.snapshotQuoteDialog.addEventListener("click", onSnapshotQuoteDialogClick);
+        dom.snapshotQuoteSearchInput.addEventListener("input", onSnapshotQuoteSearchChange);
+        dom.snapshotQuoteSearchInput.addEventListener("keydown", onSnapshotQuoteSearchKeyDown);
+        dom.clearSnapshotQuoteSearchBtn.addEventListener("click", clearSnapshotQuoteSearch);
+        dom.snapshotQuoteExchangeFilter.addEventListener("change", onSnapshotQuoteFilterChange);
+        dom.snapshotQuoteAssetFilter.addEventListener("change", onSnapshotQuoteFilterChange);
+        dom.snapshotQuoteCandidateRows.addEventListener("click", onSnapshotQuoteCandidateClick);
+        dom.snapshotQuoteCandidateRows.addEventListener("dblclick", onSnapshotQuoteCandidateDblClick);
+        dom.requestSnapshotQuoteBtn.addEventListener("click", () => requestSnapshotQuote());
         dom.openLatencyBtn.addEventListener("click", openLatencyDialog);
         dom.closeLatencyDialogButton.addEventListener("click", closeLatencyDialog);
         dom.latencyCloseButton.addEventListener("click", closeLatencyDialog);
@@ -243,10 +491,14 @@
         dom.brokerProfileRows.addEventListener("click", onBrokerProfileRowClick);
         dom.brokerProfileForm.addEventListener("submit", onBrokerProfileSubmit);
         dom.deleteProfileButton.addEventListener("click", onDeleteProfile);
-        document.addEventListener("keydown", onDocumentKeyDown);
-        if (dom.themeSelect) {
-            dom.themeSelect.addEventListener("change", () => applyTheme(dom.themeSelect.value, true));
+        if (dom.themePickerButton) {
+            dom.themePickerButton.addEventListener("click", onThemePickerButtonClick);
         }
+        if (dom.themePickerMenu) {
+            dom.themePickerMenu.addEventListener("click", onThemePickerMenuClick);
+        }
+        document.addEventListener("click", onDocumentClick);
+        document.addEventListener("keydown", onDocumentKeyDown);
 
         dom.sideButtons.forEach(button => {
             button.addEventListener("click", () => {
@@ -261,7 +513,7 @@
 
         dom.orderTypeSelect.addEventListener("change", () => {
             if (dom.orderTypeSelect.value === "MARKET" && dom.timeInForceSelect.value === "POST_ONLY") {
-                dom.timeInForceSelect.value = "GTC";
+                setSelectValue(dom.timeInForceSelect, "GTC");
             }
             toggleLimitField();
             updateTicketSummary();
@@ -301,7 +553,9 @@
     function hydrateMetadata() {
         populateSelect(dom.orderTypeSelect, state.metadata.orderTypes || [], dom.orderTypeSelect.value || "LIMIT");
         populateSelect(dom.timeInForceSelect, state.metadata.timeInForce || [], dom.timeInForceSelect.value || "GTC");
-        dom.orderModePill.textContent = `${formatEnumLabel(state.metadata.orderMode || "PAPER")} Gateway`;
+        if (dom.orderModePill) {
+            dom.orderModePill.textContent = `${formatEnumLabel(state.metadata.orderMode || "PAPER")} Gateway`;
+        }
         dom.ticketMode.textContent = formatEnumLabel(state.metadata.orderMode || "PAPER");
         const exchangeCount = (state.metadata.exchanges || []).length;
         if (dom.coverageCount) {
@@ -318,6 +572,19 @@
         `).join("");
         const fallbackValue = normalizedOptions[0] ? normalizedOptions[0].value : "";
         select.value = normalizedOptions.some(option => option.value === preferredValue) ? preferredValue : fallbackValue;
+        renderCustomSelectOptions(select);
+    }
+
+    function populateFilterSelect(select, options, selectedValue, allLabel) {
+        const normalizedOptions = Array.isArray(options) ? options : [];
+        const markup = [`<option value="">${escapeHtml(allLabel)}</option>`].concat(
+            normalizedOptions.map(option => `<option value="${escapeAttribute(option.value)}">${escapeHtml(option.label || option.value)}</option>`)
+        ).join("");
+        if (select.innerHTML !== markup) {
+            select.innerHTML = markup;
+        }
+        select.value = normalizedOptions.some(option => option.value === selectedValue) ? selectedValue : "";
+        renderCustomSelectOptions(select);
     }
 
     function onMarketDraftInput(event) {
@@ -326,6 +593,7 @@
             return;
         }
         state.marketDrafts.set(parseInteger(input.dataset.rowIndex), input.value);
+        renderDraftRowHints();
     }
 
     function onMarketDraftKeyDown(event) {
@@ -337,11 +605,39 @@
         event.preventDefault();
         const query = input.value.trim();
         const rowIndex = parseInteger(input.dataset.rowIndex);
-        if (!query) {
-            showToast("Type a ticker before pressing Return.");
+        openInstrumentDialog(rowIndex, query);
+    }
+
+    function onMarketTableFocusIn(event) {
+        const input = event.target.closest(".watchlist-symbol-input");
+        if (!input) {
             return;
         }
-        openInstrumentDialog(rowIndex, query);
+        const rowIndex = parseInteger(input.dataset.rowIndex);
+        if (state.focusedDraftRow === rowIndex) {
+            return;
+        }
+        state.focusedDraftRow = rowIndex;
+        renderDraftRowHints();
+    }
+
+    function onMarketTableFocusOut(event) {
+        const input = event.target.closest(".watchlist-symbol-input");
+        if (!input) {
+            return;
+        }
+        window.setTimeout(() => {
+            const active = document.activeElement;
+            const nextInput = active?.closest?.(".watchlist-symbol-input");
+            const nextFocusedRow = nextInput && dom.marketRows.contains(nextInput)
+                ? parseInteger(nextInput.dataset.rowIndex)
+                : null;
+            if (state.focusedDraftRow === nextFocusedRow) {
+                return;
+            }
+            state.focusedDraftRow = nextFocusedRow;
+            renderDraftRowHints();
+        }, 0);
     }
 
     async function onOrderSubmit(event) {
@@ -401,6 +697,16 @@
             const marketId = actionButton.dataset.marketId;
             const action = actionButton.dataset.action;
 
+            if (action === "edit-market") {
+                const market = state.markets.find(candidate => candidate.id === marketId);
+                openInstrumentDialog(
+                    normalizeRowIndex(market?.rowIndex ?? actionButton.dataset.rowIndex),
+                    market?.symbol || "",
+                    market?.id || null
+                );
+                return;
+            }
+
             if (action === "remove") {
                 const removedMarket = state.markets.find(market => market.id === marketId);
                 try {
@@ -417,11 +723,6 @@
                 return;
             }
 
-            if (action === "buy" || action === "sell") {
-                selectMarket(marketId, action.toUpperCase(), true);
-                dom.quantityInput.focus();
-                return;
-            }
         }
 
         const row = event.target.closest("tr[data-market-id]");
@@ -528,7 +829,7 @@
         const previousSelection = state.selectedMarketId;
         const selectedStillExists = state.markets.some(market => market.id === state.selectedMarketId);
         if (!selectedStillExists) {
-            state.selectedMarketId = state.markets[0]?.id || null;
+            state.selectedMarketId = null;
         }
         if (state.selectedMarketId && (forceLimitRefresh || previousSelection !== state.selectedMarketId)) {
             applySuggestedLimitPrice(true);
@@ -594,6 +895,7 @@
         }
 
         updateRenderedMarketRows(slotMap);
+        renderDraftRowHints();
     }
 
     function buildMarketSlotMap() {
@@ -657,19 +959,27 @@
             setRowFieldHtml(row, "ask", renderQuoteValue(market.id, "ask", market.ask));
             setRowFieldText(row, "spread", formatNumber(computeSpread(market.bid, market.ask), 1));
             setRowFieldHtml(row, "last", renderQuoteValue(market.id, "last", market.last));
+            setRowFieldText(row, "dayChange", formatSignedPercent(market.dailyChangePercent, 2));
             setRowFieldText(row, "volume", formatCompactNumber(market.volume));
             setRowFieldText(row, "funding", formatNumber(market.fundingRateApr, 2));
+            applySignedCellState(row.querySelector('[data-market-field="dayChange"]'), market.dailyChangePercent);
             const fundingCell = row.querySelector('[data-market-field="funding"]');
-            if (fundingCell) {
-                fundingCell.classList.toggle("positive-cell", toNumber(market.fundingRateApr) > 0);
-                fundingCell.classList.toggle("negative-cell", toNumber(market.fundingRateApr) < 0);
-            }
+            applySignedCellState(fundingCell, market.fundingRateApr);
         });
     }
 
     function fundingClass(value) {
         const n = toNumber(value);
         return n > 0 ? "positive-cell" : n < 0 ? "negative-cell" : "";
+    }
+
+    function applySignedCellState(element, value) {
+        if (!element) {
+            return;
+        }
+        const number = toNumber(value);
+        element.classList.toggle("positive-cell", Number.isFinite(number) && number > 0);
+        element.classList.toggle("negative-cell", Number.isFinite(number) && number < 0);
     }
 
     function setRowFieldText(row, field, value) {
@@ -692,9 +1002,11 @@
         return `
             <tr data-market-id="${escapeAttribute(market.id)}" data-row-index="${rowIndex}" class="${isSelected ? "selected" : ""}">
                 <td>
-                    <div class="symbol-cell">
-                        <strong data-market-field="symbolPrimary">${escapeHtml(market.symbol || "--")}</strong>
-                    </div>
+                    <button type="button" class="symbol-edit-btn" data-action="edit-market" data-market-id="${escapeAttribute(market.id)}" data-row-index="${rowIndex}" aria-label="Change symbol for watchlist row ${rowIndex + 1}">
+                        <div class="symbol-cell">
+                            <strong data-market-field="symbolPrimary">${escapeHtml(market.symbol || "--")}</strong>
+                        </div>
+                    </button>
                 </td>
                 <td data-market-field="asset">${escapeHtml(formatEnumLabel(market.assetType))}</td>
                 <td data-market-field="route">${escapeHtml(formatEnumLabel(market.exchange))}</td>
@@ -702,14 +1014,11 @@
                 <td class="number-cell" data-market-field="ask">${renderQuoteValue(market.id, "ask", market.ask)}</td>
                 <td class="number-cell" data-market-field="spread">${formatNumber(spread, 1)}</td>
                 <td class="number-cell" data-market-field="last">${renderQuoteValue(market.id, "last", market.last)}</td>
+                <td class="number-cell ${fundingClass(market.dailyChangePercent)}" data-market-field="dayChange">${formatSignedPercent(market.dailyChangePercent, 2)}</td>
                 <td class="number-cell" data-market-field="volume">${formatCompactNumber(market.volume)}</td>
                 <td class="number-cell ${fundingClass(market.fundingRateApr)}" data-market-field="funding">${formatNumber(market.fundingRateApr, 2)}</td>
-                <td>
-                    <div class="action-cluster compact-actions">
-                        <button type="button" class="ticket-btn buy" data-action="buy" data-market-id="${escapeAttribute(market.id)}">Buy</button>
-                        <button type="button" class="ticket-btn sell" data-action="sell" data-market-id="${escapeAttribute(market.id)}">Sell</button>
-                        <button type="button" class="icon-btn remove-btn" data-action="remove" data-market-id="${escapeAttribute(market.id)}" aria-label="Remove watchlist row">×</button>
-                    </div>
+                <td class="watchlist-remove-cell">
+                    <button type="button" class="icon-btn remove-btn" data-action="remove" data-market-id="${escapeAttribute(market.id)}" aria-label="Remove watchlist row">×</button>
                 </td>
             </tr>
         `;
@@ -717,7 +1026,6 @@
 
     function renderDraftRow(rowIndex) {
         const draftValue = state.marketDrafts.get(rowIndex) || "";
-        const prompt = draftValue ? "Press Return" : rowIndex === 0 ? "Type BTC and press Return" : "";
         return `
             <tr data-row-index="${rowIndex}" class="draft-row">
                 <td class="draft-input-cell">
@@ -726,7 +1034,7 @@
                         class="watchlist-symbol-input"
                         data-row-index="${rowIndex}"
                         value="${escapeAttribute(draftValue)}"
-                        placeholder="${escapeAttribute(prompt)}"
+                        placeholder="${escapeAttribute(draftPrompt(rowIndex, draftValue))}"
                         autocomplete="off"
                         autocapitalize="characters"
                         spellcheck="false">
@@ -739,9 +1047,48 @@
                 <td class="placeholder-cell">--</td>
                 <td class="placeholder-cell">--</td>
                 <td class="placeholder-cell">--</td>
-                <td class="placeholder-cell row-hint-cell">${draftValue ? "Return to resolve" : ""}</td>
+                <td class="placeholder-cell">--</td>
+                <td class="placeholder-cell row-hint-cell ${draftHint(rowIndex, draftValue) ? "is-active" : ""}">${escapeHtml(draftHint(rowIndex, draftValue))}</td>
             </tr>
         `;
+    }
+
+    function renderDraftRowHints() {
+        const draftRows = Array.from(dom.marketRows.querySelectorAll("tr.draft-row[data-row-index]"));
+        draftRows.forEach(row => {
+            const rowIndex = parseInteger(row.dataset.rowIndex);
+            const input = row.querySelector(".watchlist-symbol-input");
+            const draftValue = input?.value ?? state.marketDrafts.get(rowIndex) ?? "";
+            const placeholder = draftPrompt(rowIndex, draftValue);
+            if (input && input.getAttribute("placeholder") !== placeholder) {
+                input.setAttribute("placeholder", placeholder);
+            }
+            const hintCell = row.querySelector(".row-hint-cell");
+            const hint = draftHint(rowIndex, draftValue);
+            if (hintCell) {
+                if (hintCell.textContent !== hint) {
+                    hintCell.textContent = hint;
+                }
+                hintCell.classList.toggle("is-active", Boolean(hint));
+            }
+        });
+    }
+
+    function draftPrompt(rowIndex, draftValue) {
+        if (String(draftValue || "").trim()) {
+            return state.focusedDraftRow === rowIndex ? "Press Return to search" : "";
+        }
+        if (state.focusedDraftRow === rowIndex) {
+            return "Type ticker or press Return";
+        }
+        return "";
+    }
+
+    function draftHint(rowIndex, draftValue) {
+        if (state.focusedDraftRow !== rowIndex) {
+            return "";
+        }
+        return String(draftValue || "").trim() ? "Press Return" : "Browse";
     }
 
     function captureDraftFocus() {
@@ -963,7 +1310,232 @@
         `).join("");
     }
 
+    const snapshotQuoteState = {
+        query: "",
+        exchangeFilter: "",
+        assetTypeFilter: "",
+        candidates: [],
+        selectedCandidate: null,
+        loading: false,
+        requesting: false,
+        fetchId: 0,
+        searchTimer: null
+    };
+
+    function openSnapshotQuoteDialog() {
+        closeCustomSelects();
+        snapshotQuoteState.query = "";
+        snapshotQuoteState.exchangeFilter = "";
+        snapshotQuoteState.assetTypeFilter = "";
+        snapshotQuoteState.candidates = [];
+        snapshotQuoteState.selectedCandidate = null;
+        snapshotQuoteState.loading = false;
+        snapshotQuoteState.requesting = false;
+        populateFilterSelect(dom.snapshotQuoteExchangeFilter, state.metadata.exchanges || [], "", "All Exchanges");
+        populateFilterSelect(dom.snapshotQuoteAssetFilter, state.metadata.assetTypes || [], "", "All Asset Types");
+        syncCustomSelect(dom.snapshotQuoteExchangeFilter);
+        syncCustomSelect(dom.snapshotQuoteAssetFilter);
+        dom.snapshotQuoteSearchInput.value = "";
+        dom.requestSnapshotQuoteBtn.disabled = true;
+        dom.snapshotQuoteCandidatesWrap.classList.remove("hidden");
+        dom.snapshotQuoteResultPanel.classList.add("hidden");
+        dom.snapshotQuoteLoading.classList.add("hidden");
+        dom.snapshotQuoteError.classList.add("hidden");
+        dom.snapshotQuoteDialog.classList.remove("hidden");
+        dom.snapshotQuoteDialog.setAttribute("aria-hidden", "false");
+        renderSnapshotQuoteCandidates();
+        refreshSnapshotQuoteCandidates();
+        window.setTimeout(() => dom.snapshotQuoteSearchInput?.focus({preventScroll: true}), 0);
+    }
+
+    function closeSnapshotQuoteDialog() {
+        closeCustomSelects();
+        clearTimeout(snapshotQuoteState.searchTimer);
+        dom.snapshotQuoteDialog.classList.add("hidden");
+        dom.snapshotQuoteDialog.setAttribute("aria-hidden", "true");
+    }
+
+    function onSnapshotQuoteDialogClick(event) {
+        if (event.target.dataset.action === "close-snapshot-quote") {
+            closeSnapshotQuoteDialog();
+        }
+    }
+
+    function onSnapshotQuoteSearchChange() {
+        snapshotQuoteState.query = dom.snapshotQuoteSearchInput.value.trim();
+        clearTimeout(snapshotQuoteState.searchTimer);
+        snapshotQuoteState.searchTimer = setTimeout(refreshSnapshotQuoteCandidates, 250);
+    }
+
+    function onSnapshotQuoteSearchKeyDown(event) {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            clearTimeout(snapshotQuoteState.searchTimer);
+            snapshotQuoteState.query = dom.snapshotQuoteSearchInput.value.trim();
+            refreshSnapshotQuoteCandidates();
+        }
+    }
+
+    function clearSnapshotQuoteSearch() {
+        dom.snapshotQuoteSearchInput.value = "";
+        snapshotQuoteState.query = "";
+        refreshSnapshotQuoteCandidates();
+        dom.snapshotQuoteSearchInput.focus({preventScroll: true});
+    }
+
+    function onSnapshotQuoteFilterChange() {
+        snapshotQuoteState.exchangeFilter = dom.snapshotQuoteExchangeFilter.value;
+        snapshotQuoteState.assetTypeFilter = dom.snapshotQuoteAssetFilter.value;
+        refreshSnapshotQuoteCandidates();
+    }
+
+    async function refreshSnapshotQuoteCandidates() {
+        const fetchId = ++snapshotQuoteState.fetchId;
+        snapshotQuoteState.loading = true;
+        snapshotQuoteState.selectedCandidate = null;
+        dom.requestSnapshotQuoteBtn.disabled = true;
+        dom.snapshotQuoteCandidatesWrap.classList.remove("hidden");
+        dom.snapshotQuoteResultPanel.classList.add("hidden");
+        dom.snapshotQuoteError.classList.add("hidden");
+        renderSnapshotQuoteCandidates();
+
+        const url = buildInstrumentLookupUrl(
+            snapshotQuoteState.query,
+            snapshotQuoteState.exchangeFilter,
+            snapshotQuoteState.assetTypeFilter
+        );
+
+        try {
+            const candidates = await api(url);
+            if (fetchId !== snapshotQuoteState.fetchId) return;
+            snapshotQuoteState.candidates = Array.isArray(candidates) ? candidates : [];
+        } catch (error) {
+            if (fetchId !== snapshotQuoteState.fetchId) return;
+            snapshotQuoteState.candidates = [];
+        } finally {
+            if (fetchId === snapshotQuoteState.fetchId) {
+                snapshotQuoteState.loading = false;
+                renderSnapshotQuoteCandidates();
+            }
+        }
+    }
+
+    function renderSnapshotQuoteCandidates() {
+        if (snapshotQuoteState.loading) {
+            dom.snapshotQuoteCandidateRows.innerHTML = `
+                <tr><td colspan="4" class="empty-row"><span>Searching...</span></td></tr>`;
+            return;
+        }
+        if (!snapshotQuoteState.candidates.length) {
+            dom.snapshotQuoteCandidateRows.innerHTML = `
+                <tr><td colspan="4" class="empty-row">
+                    <strong>No instruments found.</strong>
+                    <span>Try a different search or change the filters.</span>
+                </td></tr>`;
+            return;
+        }
+
+        const selectedKey = snapshotQuoteState.selectedCandidate
+            ? snapshotCandidateKey(snapshotQuoteState.selectedCandidate) : null;
+
+        dom.snapshotQuoteCandidateRows.innerHTML = snapshotQuoteState.candidates.map((c, i) => {
+            const key = snapshotCandidateKey(c);
+            const selected = key === selectedKey;
+            return `<tr data-snapshot-candidate-index="${i}" class="${selected ? "selected" : ""}" aria-selected="${selected}">
+                <td>
+                    <div class="symbol-cell">
+                        <strong>${escapeHtml(c.symbol || "--")}</strong>
+                        <span>${escapeHtml(c.exchangeSymbol || "--")}</span>
+                    </div>
+                </td>
+                <td>${escapeHtml(c.assetTypeLabel || formatEnumLabel(c.assetType))}</td>
+                <td>${escapeHtml(c.exchangeLabel || formatEnumLabel(c.exchange))}</td>
+                <td>${escapeHtml(c.description || "--")}</td>
+            </tr>`;
+        }).join("");
+    }
+
+    function snapshotCandidateKey(c) {
+        return `${c.symbol}|${c.exchange}|${c.assetType}`;
+    }
+
+    function onSnapshotQuoteCandidateClick(event) {
+        const row = event.target.closest("tr[data-snapshot-candidate-index]");
+        if (!row) return;
+        const index = parseInt(row.dataset.snapshotCandidateIndex, 10);
+        const candidate = snapshotQuoteState.candidates[index];
+        if (!candidate) return;
+        snapshotQuoteState.selectedCandidate = candidate;
+        dom.requestSnapshotQuoteBtn.disabled = false;
+        renderSnapshotQuoteCandidates();
+    }
+
+    function onSnapshotQuoteCandidateDblClick(event) {
+        const row = event.target.closest("tr[data-snapshot-candidate-index]");
+        if (!row) return;
+        const index = parseInt(row.dataset.snapshotCandidateIndex, 10);
+        const candidate = snapshotQuoteState.candidates[index];
+        if (!candidate) return;
+        snapshotQuoteState.selectedCandidate = candidate;
+        requestSnapshotQuote(candidate);
+    }
+
+    async function requestSnapshotQuote(candidate) {
+        candidate = candidate || snapshotQuoteState.selectedCandidate;
+        if (!candidate) {
+            dom.snapshotQuoteError.textContent = "Select an instrument from the list first.";
+            dom.snapshotQuoteError.classList.remove("hidden");
+            return;
+        }
+
+        dom.snapshotQuoteError.classList.add("hidden");
+        dom.snapshotQuoteResultPanel.classList.add("hidden");
+        dom.snapshotQuoteCandidatesWrap.classList.add("hidden");
+        dom.snapshotQuoteLoading.classList.remove("hidden");
+        snapshotQuoteState.requesting = true;
+
+        try {
+            const result = await api("/api/snapshot-quote", {
+                method: "POST",
+                body: JSON.stringify({
+                    symbol: candidate.symbol,
+                    exchange: candidate.exchange,
+                    assetType: candidate.assetType
+                })
+            });
+            renderSnapshotQuoteResult(result);
+        } catch (error) {
+            dom.snapshotQuoteError.textContent = error.message || "Snapshot request failed.";
+            dom.snapshotQuoteError.classList.remove("hidden");
+            dom.snapshotQuoteCandidatesWrap.classList.remove("hidden");
+        } finally {
+            dom.snapshotQuoteLoading.classList.add("hidden");
+            snapshotQuoteState.requesting = false;
+        }
+    }
+
+    function renderSnapshotQuoteResult(result) {
+        dom.snapshotQuoteSymbol.textContent = result.symbol || "--";
+        dom.snapshotQuoteExchangeLabel.textContent = result.exchangeLabel || formatEnumLabel(result.exchange) || "--";
+        dom.snapshotQuoteAssetLabel.textContent = result.assetTypeLabel || formatEnumLabel(result.assetType) || "--";
+        dom.snapshotQuoteBid.textContent = formatPrice(result.bid);
+        dom.snapshotQuoteBidSize.textContent = formatPrice(result.bidSize);
+        dom.snapshotQuoteAsk.textContent = formatPrice(result.ask);
+        dom.snapshotQuoteAskSize.textContent = formatPrice(result.askSize);
+        dom.snapshotQuoteLast.textContent = formatPrice(result.last);
+        dom.snapshotQuoteLastSize.textContent = formatPrice(result.lastSize);
+        dom.snapshotQuoteVolume.textContent = formatPrice(result.volume);
+        dom.snapshotQuoteOpen.textContent = formatPrice(result.open);
+        dom.snapshotQuoteClose.textContent = formatPrice(result.close);
+        dom.snapshotQuoteMark.textContent = formatPrice(result.markPrice);
+        dom.snapshotQuoteTime.textContent = formatTime(result.quoteTime);
+        dom.snapshotQuoteRequestedAt.textContent = formatTime(result.requestedAt);
+        dom.snapshotQuoteCandidatesWrap.classList.add("hidden");
+        dom.snapshotQuoteResultPanel.classList.remove("hidden");
+    }
+
     function openLatencyDialog() {
+        closeCustomSelects();
         dom.latencyDialog.classList.remove("hidden");
         dom.latencyDialog.setAttribute("aria-hidden", "false");
         renderLatencyDialog();
@@ -971,6 +1543,7 @@
     }
 
     function closeLatencyDialog() {
+        closeCustomSelects();
         dom.latencyDialog.classList.add("hidden");
         dom.latencyDialog.setAttribute("aria-hidden", "true");
     }
@@ -1008,6 +1581,7 @@
     }
 
     function openProfilesDialog() {
+        closeCustomSelects();
         dom.brokerProfilesDialog.classList.remove("hidden");
         dom.brokerProfilesDialog.setAttribute("aria-hidden", "false");
         renderBrokerProfilesDialog();
@@ -1015,6 +1589,7 @@
     }
 
     function closeProfilesDialog() {
+        closeCustomSelects();
         dom.brokerProfilesDialog.classList.add("hidden");
         dom.brokerProfilesDialog.setAttribute("aria-hidden", "true");
     }
@@ -1068,7 +1643,7 @@
         dom.profileFormSubtitle.textContent = profile
             ? `Last updated ${formatTime(profile.updatedAt)}. Blank secret fields keep the stored value.`
             : "Create a live broker profile for this exchange.";
-        dom.profileEnvironmentSelect.value = profile?.environment || "MAINNET";
+        setSelectValue(dom.profileEnvironmentSelect, profile?.environment || "MAINNET");
         dom.deleteProfileButton.disabled = !profile;
         dom.profileFieldContainer.innerHTML = (definition.fields || []).map(field => {
             const savedField = profile?.fields?.find(candidate => candidate.key === field.key);
@@ -1239,44 +1814,40 @@
         dom.connectionBadge.textContent = connected ? "Connected" : "Disconnected";
     }
 
-    async function openInstrumentDialog(rowIndex, query) {
+    function openInstrumentDialog(rowIndex, query, existingMarketId = null) {
+        closeCustomSelects();
         state.instrumentPicker = {
             open: true,
             rowIndex,
             query,
+            exchangeFilter: "",
+            assetTypeFilter: "",
+            existingMarketId,
             candidates: [],
             selectedKeys: new Set(),
             focusedIndex: null,
             anchorIndex: null,
-            loading: true,
+            loading: false,
             submitting: false,
+            fetchId: 0,
             error: ""
         };
         renderInstrumentDialog();
-
-        try {
-            const candidates = await api(`/api/instruments?symbol=${encodeURIComponent(query)}`);
-            state.instrumentPicker.candidates = Array.isArray(candidates) ? candidates : [];
-            if (!state.instrumentPicker.candidates.length) {
-                state.instrumentPicker.error = `No supported routes found for ${query.toUpperCase()}.`;
-            }
-        } catch (error) {
-            state.instrumentPicker.error = error.message || "Unable to resolve instruments.";
-        } finally {
-            state.instrumentPicker.loading = false;
-            renderInstrumentDialog();
-            dom.instrumentDialogPanel.focus({preventScroll: true});
-        }
+        window.setTimeout(() => dom.instrumentSearchInput?.focus({preventScroll: true}), 0);
+        refreshInstrumentCandidates();
     }
 
     function closeInstrumentDialog() {
+        closeCustomSelects();
+        clearTimeout(state.instrumentPickerTimer);
         const rowIndex = state.instrumentPicker.rowIndex;
         state.instrumentPicker = defaultInstrumentPicker();
         renderInstrumentDialog();
-        focusDraftRow(rowIndex);
+        focusWatchlistRow(rowIndex);
     }
 
     async function openCatalogDialog() {
+        closeCustomSelects();
         dom.catalogDialog.classList.remove("hidden");
         dom.catalogDialog.setAttribute("aria-hidden", "false");
         dom.catalogDrilldownHead.classList.add("hidden");
@@ -1297,6 +1868,7 @@
     }
 
     function closeCatalogDialog() {
+        closeCustomSelects();
         dom.catalogDialog.classList.add("hidden");
         dom.catalogDialog.setAttribute("aria-hidden", "true");
         dom.catalogDrilldownHead.classList.add("hidden");
@@ -1432,6 +2004,110 @@
         }
     }
 
+    function onInstrumentSearchInput(event) {
+        state.instrumentPicker.query = event.target.value || "";
+        scheduleInstrumentSearch();
+    }
+
+    function onInstrumentSearchKeyDown(event) {
+        if (event.key !== "Enter") {
+            return;
+        }
+        event.preventDefault();
+        refreshInstrumentCandidates();
+    }
+
+    function clearInstrumentSearch() {
+        state.instrumentPicker.query = "";
+        renderInstrumentDialog();
+        refreshInstrumentCandidates();
+        dom.instrumentSearchInput?.focus({preventScroll: true});
+    }
+
+    function onInstrumentFilterChange() {
+        state.instrumentPicker.exchangeFilter = dom.instrumentExchangeFilter.value || "";
+        state.instrumentPicker.assetTypeFilter = dom.instrumentAssetFilter.value || "";
+        refreshInstrumentCandidates();
+    }
+
+    function scheduleInstrumentSearch() {
+        clearTimeout(state.instrumentPickerTimer);
+        state.instrumentPickerTimer = window.setTimeout(() => {
+            refreshInstrumentCandidates();
+        }, 180);
+    }
+
+    async function refreshInstrumentCandidates() {
+        const picker = state.instrumentPicker;
+        if (!picker.open) {
+            return;
+        }
+
+        clearTimeout(state.instrumentPickerTimer);
+        const requestId = (picker.fetchId || 0) + 1;
+        const priorSelection = new Set(picker.selectedKeys);
+        picker.fetchId = requestId;
+        picker.loading = true;
+        picker.error = "";
+        renderInstrumentDialog();
+
+        try {
+            const candidates = await api(buildInstrumentLookupUrl(picker.query, picker.exchangeFilter, picker.assetTypeFilter));
+            if (!state.instrumentPicker.open || state.instrumentPicker.fetchId !== requestId) {
+                return;
+            }
+
+            const nextCandidates = Array.isArray(candidates) ? candidates : [];
+            const nextSelection = new Set(
+                nextCandidates
+                    .map(candidateKey)
+                    .filter(key => priorSelection.has(key))
+            );
+            const focusedIndex = nextSelection.size
+                ? nextCandidates.findIndex(candidate => nextSelection.has(candidateKey(candidate)))
+                : nextCandidates.length ? 0 : null;
+
+            state.instrumentPicker.candidates = nextCandidates;
+            state.instrumentPicker.selectedKeys = nextSelection;
+            state.instrumentPicker.focusedIndex = focusedIndex;
+            state.instrumentPicker.anchorIndex = nextSelection.size ? focusedIndex : null;
+            state.instrumentPicker.error = nextCandidates.length
+                ? ""
+                : picker.query.trim()
+                    ? `No instruments matched ${picker.query.trim().toUpperCase()}.`
+                    : "No instruments match the current filters.";
+        } catch (error) {
+            if (!state.instrumentPicker.open || state.instrumentPicker.fetchId !== requestId) {
+                return;
+            }
+            state.instrumentPicker.candidates = [];
+            state.instrumentPicker.selectedKeys = new Set();
+            state.instrumentPicker.focusedIndex = null;
+            state.instrumentPicker.anchorIndex = null;
+            state.instrumentPicker.error = error.message || "Unable to load instruments.";
+        } finally {
+            if (!state.instrumentPicker.open || state.instrumentPicker.fetchId !== requestId) {
+                return;
+            }
+            state.instrumentPicker.loading = false;
+            renderInstrumentDialog();
+        }
+    }
+
+    function buildInstrumentLookupUrl(query, exchange, assetType) {
+        const params = new URLSearchParams();
+        if (String(query || "").trim()) {
+            params.set("symbol", query.trim());
+        }
+        if (String(exchange || "").trim()) {
+            params.set("exchange", exchange.trim());
+        }
+        if (String(assetType || "").trim()) {
+            params.set("assetType", assetType.trim());
+        }
+        return params.size ? `/api/instruments?${params.toString()}` : "/api/instruments";
+    }
+
     function onInstrumentPickerRowDoubleClick(event) {
         const row = event.target.closest("tr[data-candidate-index]");
         if (!row) {
@@ -1452,21 +2128,38 @@
         const picker = state.instrumentPicker;
         const selectedCandidates = picker.candidates.filter(candidate => picker.selectedKeys.has(candidateKey(candidate)));
         if (!picker.open || !selectedCandidates.length) {
-            showToast("Select at least one route before adding the row.");
+            showToast("Select at least one instrument before saving the row.");
             return;
         }
 
-        const targetRows = planTargetRows(selectedCandidates.length, picker.rowIndex);
+        const existingMarket = picker.existingMarketId
+            ? state.markets.find(market => market.id === picker.existingMarketId) || null
+            : findMarketByRow(picker.rowIndex);
+        if (selectedCandidates.length === 1 && candidateMatchesMarket(selectedCandidates[0], existingMarket)) {
+            closeInstrumentDialog();
+            showToast("Watchlist row is already set to that instrument.");
+            return;
+        }
+
+        const targetRows = planTargetRows(selectedCandidates.length, picker.rowIndex, normalizeRowIndex(existingMarket?.rowIndex));
         if (targetRows.length < selectedCandidates.length) {
             showToast(`Not enough open watchlist rows for ${selectedCandidates.length} instruments.`);
             return;
         }
+
+        const shouldRetainSelection = Boolean(existingMarket && state.selectedMarketId === existingMarket.id);
 
         state.instrumentPicker.submitting = true;
         renderInstrumentDialog();
 
         const createdMarkets = [];
         try {
+            if (existingMarket && targetRows[0] === normalizeRowIndex(existingMarket.rowIndex)) {
+                await api(`/api/markets/${existingMarket.id}`, {method: "DELETE"});
+                state.markets = state.markets.filter(market => market.id !== existingMarket.id);
+                state.marketDrafts.set(targetRows[0], picker.query || "");
+            }
+
             for (let index = 0; index < selectedCandidates.length; index += 1) {
                 const candidate = selectedCandidates[index];
                 const created = await api("/api/markets", {
@@ -1484,13 +2177,14 @@
             }
 
             state.instrumentPicker = defaultInstrumentPicker();
-            if (createdMarkets.length) {
-                selectMarket(createdMarkets[0].id, state.selectedSide, true);
+            if (shouldRetainSelection && createdMarkets.length) {
+                state.selectedMarketId = createdMarkets[0].id;
+                applySuggestedLimitPrice(true);
             }
             renderAll();
             showToast(createdMarkets.length === 1
-                ? `Added ${createdMarkets[0].symbol} on ${formatEnumLabel(createdMarkets[0].exchange)}.`
-                : `Added ${createdMarkets.length} instruments to the watchlist.`);
+                ? `${existingMarket ? "Set" : "Added"} ${createdMarkets[0].symbol} on ${formatEnumLabel(createdMarkets[0].exchange)}.`
+                : `${existingMarket ? "Updated row and added" : "Added"} ${createdMarkets.length} instruments to the watchlist.`);
         } catch (error) {
             if (createdMarkets.length) {
                 state.instrumentPicker = defaultInstrumentPicker();
@@ -1499,9 +2193,9 @@
                 return;
             }
             state.instrumentPicker.submitting = false;
-            state.instrumentPicker.error = error.message || "Unable to add the watchlist row.";
+            state.instrumentPicker.error = error.message || "Unable to save the watchlist row.";
             renderInstrumentDialog();
-            showToast(error.message || "Unable to add the watchlist row.");
+            showToast(error.message || "Unable to save the watchlist row.");
         }
     }
 
@@ -1513,27 +2207,35 @@
         if (!picker.open) {
             dom.instrumentDialogRows.innerHTML = "";
             dom.instrumentDialogTitle.textContent = "Resolve Symbol";
-            dom.instrumentDialogSubtitle.textContent = "Choose the route and asset class for this watchlist row.";
+            dom.instrumentDialogSubtitle.textContent = "Choose the exchange and asset class for this watchlist row.";
             dom.confirmInstrumentButton.disabled = true;
             dom.confirmInstrumentButton.textContent = "Add Instrument";
+            syncInstrumentPickerControls();
             return;
         }
 
-        dom.instrumentDialogTitle.textContent = `Resolve ${String(picker.query || "").toUpperCase()}`;
+        dom.instrumentDialogTitle.textContent = picker.query.trim()
+            ? `Resolve ${String(picker.query || "").toUpperCase()}`
+            : "Browse Instruments";
         dom.instrumentDialogSubtitle.textContent = `Watchlist row ${picker.rowIndex + 1}: choose the exchange and asset class to subscribe.`;
         const selectedCount = picker.selectedKeys.size;
         dom.confirmInstrumentButton.disabled = picker.loading || picker.submitting || selectedCount === 0;
         dom.confirmInstrumentButton.textContent = picker.submitting
-            ? "Adding..."
-            : selectedCount > 1
-                ? `Add ${selectedCount} Instruments`
-                : "Add Instrument";
+            ? "Saving..."
+            : picker.existingMarketId
+                ? selectedCount > 1
+                    ? `Set + Add ${selectedCount - 1}`
+                    : "Set Instrument"
+                : selectedCount > 1
+                    ? `Add ${selectedCount} Instruments`
+                    : "Add Instrument";
+        syncInstrumentPickerControls();
 
         if (picker.loading) {
             dom.instrumentDialogRows.innerHTML = `
                 <tr>
-                    <td colspan="5" class="empty-row">
-                        <strong>Searching routes</strong>
+                    <td colspan="4" class="empty-row">
+                        <strong>Loading instruments</strong>
                         <span>Checking the supported registries for matches.</span>
                     </td>
                 </tr>
@@ -1544,8 +2246,8 @@
         if (picker.error) {
             dom.instrumentDialogRows.innerHTML = `
                 <tr>
-                    <td colspan="5" class="empty-row">
-                        <strong>No route selected</strong>
+                    <td colspan="4" class="empty-row">
+                        <strong>No instruments found</strong>
                         <span>${escapeHtml(picker.error)}</span>
                     </td>
                 </tr>
@@ -1567,17 +2269,52 @@
                 </td>
                 <td>${escapeHtml(candidate.assetTypeLabel || formatEnumLabel(candidate.assetType))}</td>
                 <td>${escapeHtml(candidate.exchangeLabel || formatEnumLabel(candidate.exchange))}</td>
-                <td class="number-cell picker-symbol-cell">${escapeHtml(candidate.exchangeSymbol || "--")}</td>
                 <td>${escapeHtml(candidate.description || "--")}</td>
             </tr>
         `).join("");
         restoreInstrumentPickerFocus();
     }
 
+    function syncInstrumentPickerControls() {
+        populateFilterSelect(dom.instrumentExchangeFilter, state.metadata.exchanges || [], state.instrumentPicker.exchangeFilter, "All Exchanges");
+        populateFilterSelect(dom.instrumentAssetFilter, state.metadata.assetTypes || [], state.instrumentPicker.assetTypeFilter, "All Asset Types");
+        const desiredQuery = state.instrumentPicker.open ? state.instrumentPicker.query || "" : "";
+        if (dom.instrumentSearchInput.value !== desiredQuery) {
+            dom.instrumentSearchInput.value = desiredQuery;
+        }
+        dom.instrumentSearchInput.disabled = state.instrumentPicker.submitting;
+        dom.instrumentExchangeFilter.disabled = state.instrumentPicker.submitting;
+        dom.instrumentAssetFilter.disabled = state.instrumentPicker.submitting;
+        syncCustomSelect(dom.instrumentExchangeFilter);
+        syncCustomSelect(dom.instrumentAssetFilter);
+        dom.clearInstrumentSearchButton.disabled = state.instrumentPicker.submitting || !String(state.instrumentPicker.query || "").length;
+    }
+
     function onDocumentKeyDown(event) {
+        if (event.key === "Escape" && state.themePickerOpen) {
+            event.preventDefault();
+            toggleThemePicker(false);
+            dom.themePickerButton?.focus({preventScroll: true});
+            return;
+        }
+
+        if (event.key === "Escape" && state.openCustomSelectId) {
+            event.preventDefault();
+            const activeSelectId = state.openCustomSelectId;
+            closeCustomSelects();
+            customSelects.get(activeSelectId)?.trigger.focus({preventScroll: true});
+            return;
+        }
+
         if (event.key === "Escape" && !dom.catalogDialog.classList.contains("hidden")) {
             event.preventDefault();
             closeCatalogDialog();
+            return;
+        }
+
+        if (event.key === "Escape" && !dom.snapshotQuoteDialog.classList.contains("hidden")) {
+            event.preventDefault();
+            closeSnapshotQuoteDialog();
             return;
         }
 
@@ -1594,6 +2331,10 @@
         if (event.key === "Escape") {
             event.preventDefault();
             closeInstrumentDialog();
+            return;
+        }
+
+        if (event.target.closest(".instrument-picker-controls")) {
             return;
         }
 
@@ -1693,6 +2434,15 @@
         ].join("|");
     }
 
+    function candidateMatchesMarket(candidate, market) {
+        if (!candidate || !market) {
+            return false;
+        }
+        return candidate.exchange === market.exchange
+            && candidate.assetType === market.assetType
+            && (candidate.exchangeSymbol === market.exchangeSymbol || candidate.symbol === market.symbol);
+    }
+
     function findBrokerProfile(exchange) {
         return (state.brokerProfiles.profiles || []).find(profile => profile.exchange === exchange) || null;
     }
@@ -1730,7 +2480,7 @@
                 ? `${formatEnumLabel(market.exchange)} profile is saved but the broker is not connected: ${connection.error}`
                 : `${formatEnumLabel(market.exchange)} profile is saved but the broker is not connected yet.`;
         }
-        return `${connection.exchangeLabel || formatEnumLabel(connection.exchange)} is connected on ${formatEnumLabel(connection.environment)}. Orders route live to the exchange broker.`;
+        return `${connection.exchangeLabel || formatEnumLabel(connection.exchange)} is connected on ${formatEnumLabel(connection.environment)}. Orders submit live to the exchange broker.`;
     }
 
     function loadOrderIntoTicket(order) {
@@ -1750,8 +2500,8 @@
                 state.selectedMarketId = matchingMarket.id;
             }
         }
-        dom.orderTypeSelect.value = order.orderType || "LIMIT";
-        dom.timeInForceSelect.value = order.timeInForce || "GTC";
+        setSelectValue(dom.orderTypeSelect, order.orderType || "LIMIT");
+        setSelectValue(dom.timeInForceSelect, order.timeInForce || "GTC");
         dom.clientOrderIdInput.value = order.clientOrderId || "";
         dom.quantityInput.value = order.quantity ? formatEditableNumber(order.quantity) : "";
         dom.limitPriceInput.value = order.limitPrice ? formatEditableNumber(order.limitPrice) : "";
@@ -1820,26 +2570,42 @@
             return;
         }
         const input = dom.marketRows.querySelector(`.watchlist-symbol-input[data-row-index="${rowIndex}"]`);
-        if (!input) {
+        if (input) {
+            input.focus({preventScroll: true});
+            input.select();
             return;
         }
-        input.focus({preventScroll: true});
-        input.select();
+        const editButton = dom.marketRows.querySelector(`.symbol-edit-btn[data-row-index="${rowIndex}"]`);
+        editButton?.focus({preventScroll: true});
     }
 
-    function planTargetRows(count, startingRow) {
+    function focusWatchlistRow(rowIndex) {
+        focusDraftRow(rowIndex);
+    }
+
+    function findMarketByRow(rowIndex) {
+        const safeRowIndex = normalizeRowIndex(rowIndex);
+        return state.markets.find(market => normalizeRowIndex(market.rowIndex) === safeRowIndex) || null;
+    }
+
+    function planTargetRows(count, startingRow, reservedRow) {
         const occupiedRows = new Set(
             state.markets
                 .map(market => normalizeRowIndex(market.rowIndex))
+                .filter(rowIndex => rowIndex !== normalizeRowIndex(reservedRow))
                 .filter(Number.isInteger)
         );
         const maxRows = configuredMaxRows();
         const safeStart = Number.isInteger(startingRow) ? startingRow : 0;
         const rows = [];
 
+        if (Number.isInteger(reservedRow) && rows.length < count) {
+            rows.push(reservedRow);
+        }
+
         for (let offset = 0; offset < maxRows && rows.length < count; offset += 1) {
             const rowIndex = (safeStart + offset) % maxRows;
-            if (occupiedRows.has(rowIndex)) {
+            if (occupiedRows.has(rowIndex) || rows.includes(rowIndex)) {
                 continue;
             }
             rows.push(rowIndex);
@@ -1916,6 +2682,18 @@
         }
         const formatted = formatNumber(number, maxDigits);
         return number > 0 ? `+${formatted}` : formatted;
+    }
+
+    function formatSignedPercent(value, maxDigits) {
+        const number = toNumber(value);
+        if (!Number.isFinite(number)) {
+            return "--";
+        }
+        const formatted = number.toLocaleString(undefined, {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: maxDigits
+        });
+        return `${number > 0 ? "+" : ""}${formatted}%`;
     }
 
     function formatCompactNumber(value) {

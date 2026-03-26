@@ -11,6 +11,8 @@ import com.fueledbychai.switchboard.api.PairSnapshot;
 import com.fueledbychai.switchboard.api.PairSubscriptionRequest;
 import com.fueledbychai.switchboard.api.PriceHistoryPoint;
 import com.fueledbychai.switchboard.api.QuoteLatencySnapshot;
+import com.fueledbychai.switchboard.api.SnapshotQuoteRequest;
+import com.fueledbychai.switchboard.api.SnapshotQuoteResponse;
 import com.fueledbychai.switchboard.config.SwitchboardProperties;
 import com.fueledbychai.switchboard.model.OrderSide;
 import com.fueledbychai.switchboard.model.OrderStatus;
@@ -39,6 +41,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -64,6 +67,11 @@ public class SwitchboardStateService {
     private static final BigDecimal APR_TO_BPS_PER_HOUR = BigDecimal.valueOf(100).divide(BigDecimal.valueOf(24L * 365L), MC);
     private static final BigDecimal BPS_PER_HOUR_TO_APR = BigDecimal.valueOf(24L * 365L).divide(BigDecimal.valueOf(100), MC);
     private static final List<String> LOOKUP_QUOTES = List.of("USDC", "USDT");
+    private static final Comparator<InstrumentLookupOption> INSTRUMENT_LOOKUP_ORDER = Comparator
+            .comparing(InstrumentLookupOption::exchangeLabel, Comparator.nullsLast(String::compareToIgnoreCase))
+            .thenComparing(InstrumentLookupOption::assetTypeLabel, Comparator.nullsLast(String::compareToIgnoreCase))
+            .thenComparing(InstrumentLookupOption::symbol, Comparator.nullsLast(String::compareToIgnoreCase))
+            .thenComparing(InstrumentLookupOption::exchangeSymbol, Comparator.nullsLast(String::compareToIgnoreCase));
 
     private final SwitchboardProperties properties;
     private final MarketDataCatalogService marketDataCatalogService;
@@ -133,6 +141,61 @@ public class SwitchboardStateService {
         }
 
         return context.toSnapshot();
+    }
+
+    public SnapshotQuoteResponse requestSnapshotQuote(SnapshotQuoteRequest request) {
+        Objects.requireNonNull(request, "request is required");
+        Instant requestedAt = Instant.now(clock);
+
+        SupportedExchange exchange = marketDataCatalogService.requireExchange(request.exchange());
+        SupportedAssetType assetType = SupportedAssetType.fromInput(request.assetType());
+        String commonSymbol = normalizeRequestedSymbol(request.symbol(), assetType);
+
+        Ticker ticker = exchange.supports(assetType)
+                ? resolveTicker(exchange, assetType, commonSymbol)
+                : resolveTickerStrict(exchange, assetType, commonSymbol);
+        if (ticker == null) {
+            throw new IllegalArgumentException("Unable to resolve " + commonSymbol + " as " + assetType.displayName()
+                    + " on " + exchange.displayName() + ".");
+        }
+
+        QuoteEngine engine = getOrStartEngine(exchange.exchange());
+        ILevel1Quote quote;
+        try {
+            quote = engine.requestLevel1Snapshot(ticker);
+        } catch (UnsupportedOperationException e) {
+            throw new IllegalStateException(exchange.displayName() + " does not support snapshot quotes.");
+        }
+
+        if (quote == null) {
+            throw new IllegalStateException("No snapshot data returned for " + commonSymbol + " on " + exchange.displayName() + ".");
+        }
+
+        Instant quoteTime = null;
+        if (quote.getTimeStamp() != null) {
+            quoteTime = quote.getTimeStamp().toInstant();
+        }
+
+        return new SnapshotQuoteResponse(
+                commonSymbol,
+                Optional.ofNullable(ticker.getSymbol()).orElse(commonSymbol),
+                exchange.name(),
+                exchange.displayName(),
+                assetType.name(),
+                assetType.displayName(),
+                quote.containsType(QuoteType.BID) ? quote.getValue(QuoteType.BID) : null,
+                quote.containsType(QuoteType.BID_SIZE) ? quote.getValue(QuoteType.BID_SIZE) : null,
+                quote.containsType(QuoteType.ASK) ? quote.getValue(QuoteType.ASK) : null,
+                quote.containsType(QuoteType.ASK_SIZE) ? quote.getValue(QuoteType.ASK_SIZE) : null,
+                quote.containsType(QuoteType.LAST) ? quote.getValue(QuoteType.LAST) : null,
+                quote.containsType(QuoteType.LAST_SIZE) ? quote.getValue(QuoteType.LAST_SIZE) : null,
+                quote.containsType(QuoteType.VOLUME) ? quote.getValue(QuoteType.VOLUME) : null,
+                quote.containsType(QuoteType.OPEN) ? quote.getValue(QuoteType.OPEN) : null,
+                quote.containsType(QuoteType.CLOSE) ? quote.getValue(QuoteType.CLOSE) : null,
+                quote.containsType(QuoteType.MARK_PRICE) ? quote.getValue(QuoteType.MARK_PRICE) : null,
+                quoteTime,
+                requestedAt
+        );
     }
 
     public void removeMarket(String marketId) {
@@ -234,17 +297,26 @@ public class SwitchboardStateService {
                 .toList();
     }
 
-    public List<InstrumentLookupOption> instrumentLookup(String symbol) {
-        String normalizedQuery = normalizeLookupSymbol(symbol);
-        String underlying = extractUnderlying(normalizedQuery);
+    public List<InstrumentLookupOption> instrumentLookup(String symbol, String exchangeName, String assetTypeName) {
+        String normalizedQuery = normalizeLookupQuery(symbol);
+        String underlying = normalizedQuery.isBlank() ? "" : extractUnderlying(normalizedQuery);
+        SupportedExchange exchangeFilter = resolveExchangeFilter(exchangeName);
+        SupportedAssetType assetTypeFilter = resolveAssetTypeFilter(assetTypeName);
         Map<String, InstrumentLookupOption> matches = new LinkedHashMap<>();
 
-        for (SupportedExchange exchange : marketDataCatalogService.supportedExchanges()) {
+        for (SupportedExchange exchange : lookupExchanges(exchangeFilter)) {
             ITickerRegistry registry = safeRegistry(exchange.exchange());
             if (registry == null) {
                 continue;
             }
             for (SupportedAssetType assetType : supportedAssetTypesForLookup(exchange, registry)) {
+                if (assetTypeFilter != null && assetType != assetTypeFilter) {
+                    continue;
+                }
+                if (normalizedQuery.isBlank()) {
+                    addCatalogLookupOptions(matches, exchange, assetType, registry);
+                    continue;
+                }
                 for (String candidate : instrumentLookupCandidates(normalizedQuery, underlying)) {
                     Ticker ticker = resolveUsingRegistryCandidateStrict(registry, assetType.instrumentType(), candidate, exchange.exchange());
                     if (ticker != null) {
@@ -255,7 +327,7 @@ public class SwitchboardStateService {
         }
 
         return matches.values().stream()
-                .limit(24)
+                .sorted(INSTRUMENT_LOOKUP_ORDER)
                 .toList();
     }
 
@@ -451,6 +523,26 @@ public class SwitchboardStateService {
         return List.copyOf(assetTypes);
     }
 
+    private List<SupportedExchange> lookupExchanges(SupportedExchange exchangeFilter) {
+        return exchangeFilter == null
+                ? marketDataCatalogService.supportedExchanges()
+                : List.of(exchangeFilter);
+    }
+
+    private SupportedExchange resolveExchangeFilter(String exchangeName) {
+        if (exchangeName == null || exchangeName.isBlank()) {
+            return null;
+        }
+        return marketDataCatalogService.requireExchange(exchangeName);
+    }
+
+    private SupportedAssetType resolveAssetTypeFilter(String assetTypeName) {
+        if (assetTypeName == null || assetTypeName.isBlank()) {
+            return null;
+        }
+        return SupportedAssetType.fromInput(assetTypeName);
+    }
+
     private ITickerRegistry safeRegistry(Exchange exchange) {
         try {
             return TickerRegistryFactory.getInstance(exchange);
@@ -578,6 +670,27 @@ public class SwitchboardStateService {
         ));
     }
 
+    private void addCatalogLookupOptions(Map<String, InstrumentLookupOption> matches,
+                                         SupportedExchange exchange,
+                                         SupportedAssetType assetType,
+                                         ITickerRegistry registry) {
+        Ticker[] tickers;
+        try {
+            tickers = registry.getAllTickersForType(assetType.instrumentType());
+        } catch (RuntimeException e) {
+            log.debug("Unable to enumerate {} lookup candidates on {}", assetType.name(), exchange.name(), e);
+            return;
+        }
+        if (tickers == null || tickers.length == 0) {
+            return;
+        }
+
+        Arrays.stream(tickers)
+                .filter(Objects::nonNull)
+                .filter(ticker -> ticker.getSymbol() != null && !ticker.getSymbol().isBlank())
+                .forEach(ticker -> addInstrumentLookupOption(matches, exchange, assetType, ticker, ticker.getSymbol()));
+    }
+
     private String canonicalLookupSymbol(SupportedExchange exchange,
                                          SupportedAssetType assetType,
                                          String exchangeSymbol,
@@ -690,6 +803,13 @@ public class SwitchboardStateService {
         return symbol.trim().toUpperCase(Locale.ROOT).replace(" ", "").replace('-', '/');
     }
 
+    private String normalizeLookupQuery(String symbol) {
+        if (symbol == null || symbol.isBlank()) {
+            return "";
+        }
+        return normalizeLookupSymbol(symbol);
+    }
+
     private String normalizeRequestedSymbol(String symbol, SupportedAssetType assetType) {
         String normalized = normalizeLookupSymbol(symbol);
         if (normalized.contains("/")) {
@@ -725,6 +845,15 @@ public class SwitchboardStateService {
             return null;
         }
         return bid.add(ask, MC).divide(TWO, MC);
+    }
+
+    private static BigDecimal dailyChangePercent(BigDecimal last, BigDecimal referencePrice) {
+        if (last == null || referencePrice == null || referencePrice.compareTo(BigDecimal.ZERO) == 0) {
+            return null;
+        }
+        return last.subtract(referencePrice, MC)
+                .multiply(BigDecimal.valueOf(100), MC)
+                .divide(referencePrice, MC);
     }
 
     private static BigDecimal firstNonNull(BigDecimal first, BigDecimal second) {
@@ -879,6 +1008,7 @@ public class SwitchboardStateService {
         private volatile BigDecimal bid;
         private volatile BigDecimal ask;
         private volatile BigDecimal last;
+        private volatile BigDecimal dayReferencePrice;
         private volatile BigDecimal volume;
         private volatile BigDecimal fundingRateApr;
         private volatile BigDecimal fundingRateBpsPerHour;
@@ -917,6 +1047,7 @@ public class SwitchboardStateService {
             bid = quoteValue(quote, QuoteType.BID, bid);
             ask = quoteValue(quote, QuoteType.ASK, ask);
             last = quoteValue(quote, QuoteType.LAST, last);
+            dayReferencePrice = quoteValue(quote, QuoteType.CLOSE, quoteValue(quote, QuoteType.OPEN, dayReferencePrice));
             volume = quoteValue(quote, QuoteType.VOLUME, quoteValue(quote, QuoteType.VOLUME_NOTIONAL, volume));
             fundingRateApr = quoteValue(quote, QuoteType.FUNDING_RATE_APR, fundingRateApr);
             fundingRateBpsPerHour = quoteValue(quote, QuoteType.FUNDING_RATE_HOURLY_BPS, fundingRateBpsPerHour);
@@ -954,6 +1085,7 @@ public class SwitchboardStateService {
                     bid,
                     ask,
                     last,
+                    dailyChangePercent(last, dayReferencePrice),
                     volume,
                     fundingRateApr,
                     fundingRateBpsPerHour,
