@@ -41,7 +41,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -298,8 +297,7 @@ public class SwitchboardStateService {
     }
 
     public List<InstrumentLookupOption> instrumentLookup(String symbol, String exchangeName, String assetTypeName) {
-        String normalizedQuery = normalizeLookupQuery(symbol);
-        String underlying = normalizedQuery.isBlank() ? "" : extractUnderlying(normalizedQuery);
+        String matchKey = lookupMatchKey(symbol);
         SupportedExchange exchangeFilter = resolveExchangeFilter(exchangeName);
         SupportedAssetType assetTypeFilter = resolveAssetTypeFilter(assetTypeName);
         Map<String, InstrumentLookupOption> matches = new LinkedHashMap<>();
@@ -313,16 +311,7 @@ public class SwitchboardStateService {
                 if (assetTypeFilter != null && assetType != assetTypeFilter) {
                     continue;
                 }
-                if (normalizedQuery.isBlank()) {
-                    addCatalogLookupOptions(matches, exchange, assetType, registry);
-                    continue;
-                }
-                for (String candidate : instrumentLookupCandidates(normalizedQuery, underlying)) {
-                    Ticker ticker = resolveUsingRegistryCandidateStrict(registry, assetType.instrumentType(), candidate, exchange.exchange());
-                    if (ticker != null) {
-                        addInstrumentLookupOption(matches, exchange, assetType, ticker, candidate);
-                    }
-                }
+                addMatchingLookupOptions(matches, exchange, assetType, registry, matchKey);
             }
         }
 
@@ -606,28 +595,6 @@ public class SwitchboardStateService {
         return null;
     }
 
-    private Ticker resolveUsingRegistryCandidateStrict(ITickerRegistry registry,
-                                                       InstrumentType instrumentType,
-                                                       String candidate,
-                                                       Exchange exchange) {
-        try {
-            Ticker byCommon = registry.lookupByCommonSymbol(instrumentType, candidate);
-            if (byCommon != null) {
-                return byCommon;
-            }
-            String exchangeSymbol = registry.commonSymbolToExchangeSymbol(instrumentType, candidate);
-            if (exchangeSymbol != null && !exchangeSymbol.isBlank()) {
-                Ticker byBroker = registry.lookupByBrokerSymbol(instrumentType, exchangeSymbol);
-                if (byBroker != null) {
-                    return byBroker;
-                }
-            }
-        } catch (RuntimeException e) {
-            log.debug("Strict ticker lookup failed for common symbol {} on {}", candidate, exchange, e);
-        }
-        return null;
-    }
-
     private Set<String> commonSymbolCandidates(String commonSymbol) {
         String normalized = normalizeLookupSymbol(commonSymbol);
         LinkedHashSet<String> candidates = new LinkedHashSet<>();
@@ -637,17 +604,6 @@ public class SwitchboardStateService {
         }
         LOOKUP_QUOTES.forEach(quote -> candidates.add(normalized + "/" + quote));
         candidates.add(normalized);
-        return candidates;
-    }
-
-    private Set<String> instrumentLookupCandidates(String normalizedQuery, String underlying) {
-        LinkedHashSet<String> candidates = new LinkedHashSet<>();
-        if (normalizedQuery.contains("/")) {
-            candidates.add(normalizedQuery);
-        } else {
-            LOOKUP_QUOTES.forEach(quote -> candidates.add(underlying + "/" + quote));
-            candidates.add(underlying);
-        }
         return candidates;
     }
 
@@ -670,10 +626,11 @@ public class SwitchboardStateService {
         ));
     }
 
-    private void addCatalogLookupOptions(Map<String, InstrumentLookupOption> matches,
-                                         SupportedExchange exchange,
-                                         SupportedAssetType assetType,
-                                         ITickerRegistry registry) {
+    private void addMatchingLookupOptions(Map<String, InstrumentLookupOption> matches,
+                                          SupportedExchange exchange,
+                                          SupportedAssetType assetType,
+                                          ITickerRegistry registry,
+                                          String matchKey) {
         Ticker[] tickers;
         try {
             tickers = registry.getAllTickersForType(assetType.instrumentType());
@@ -685,10 +642,30 @@ public class SwitchboardStateService {
             return;
         }
 
-        Arrays.stream(tickers)
-                .filter(Objects::nonNull)
-                .filter(ticker -> ticker.getSymbol() != null && !ticker.getSymbol().isBlank())
-                .forEach(ticker -> addInstrumentLookupOption(matches, exchange, assetType, ticker, ticker.getSymbol()));
+        for (Ticker ticker : tickers) {
+            if (ticker == null || ticker.getSymbol() == null || ticker.getSymbol().isBlank()) {
+                continue;
+            }
+            if (!matchKey.isEmpty() && !lookupMatchKey(ticker.getSymbol()).contains(matchKey)) {
+                continue;
+            }
+            addInstrumentLookupOption(matches, exchange, assetType, ticker, ticker.getSymbol());
+        }
+    }
+
+    private static String lookupMatchKey(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder(value.length());
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c == '-' || c == '/' || c == '_' || c == ' ' || c == '.') {
+                continue;
+            }
+            sb.append(Character.toUpperCase(c));
+        }
+        return sb.toString();
     }
 
     private String canonicalLookupSymbol(SupportedExchange exchange,
@@ -803,13 +780,6 @@ public class SwitchboardStateService {
         return symbol.trim().toUpperCase(Locale.ROOT).replace(" ", "").replace('-', '/');
     }
 
-    private String normalizeLookupQuery(String symbol) {
-        if (symbol == null || symbol.isBlank()) {
-            return "";
-        }
-        return normalizeLookupSymbol(symbol);
-    }
-
     private String normalizeRequestedSymbol(String symbol, SupportedAssetType assetType) {
         String normalized = normalizeLookupSymbol(symbol);
         if (normalized.contains("/")) {
@@ -819,11 +789,6 @@ public class SwitchboardStateService {
             case CRYPTO_SPOT, PERPETUAL_FUTURES -> normalized + "/USDC";
             default -> normalized;
         };
-    }
-
-    private String extractUnderlying(String normalizedQuery) {
-        int separator = normalizedQuery.indexOf('/');
-        return separator > 0 ? normalizedQuery.substring(0, separator) : normalizedQuery;
     }
 
     private BigDecimal normalizePositive(BigDecimal value, String message) {

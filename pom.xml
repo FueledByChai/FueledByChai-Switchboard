@@ -122,6 +122,11 @@
         </dependency>
         <dependency>
             <groupId>com.fueledbychai</groupId>
+            <artifactId>hibachi-market-data-impl</artifactId>
+            <version>${fueledbychai.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fueledbychai</groupId>
             <artifactId>hyperliquid-broker-api-impl</artifactId>
             <version>${fueledbychai.version}</version>
         </dependency>
@@ -153,6 +158,11 @@
         <dependency>
             <groupId>com.fueledbychai</groupId>
             <artifactId>okx-broker-api-impl</artifactId>
+            <version>${fueledbychai.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fueledbychai</groupId>
+            <artifactId>hibachi-broker-api-impl</artifactId>
             <version>${fueledbychai.version}</version>
         </dependency>
 

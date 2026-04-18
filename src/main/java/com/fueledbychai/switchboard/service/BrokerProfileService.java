@@ -278,6 +278,18 @@ public class BrokerProfileService {
                         new BrokerFieldDefinition("subAccountId", "Sub Account ID", false, true,
                                 "Drift sub-account identifier.")
                 )));
+        definitions.put("HIBACHI", new BrokerExchangeDefinition(
+                "HIBACHI",
+                "Hibachi",
+                "apiKey",
+                List.of(
+                        new BrokerFieldDefinition("apiKey", "API Key", false, true,
+                                "Hibachi API key."),
+                        new BrokerFieldDefinition("apiSecret", "API Secret", true, true,
+                                "Hibachi API secret."),
+                        new BrokerFieldDefinition("accountId", "Account ID", false, true,
+                                "Hibachi account identifier.")
+                )));
         return Collections.unmodifiableMap(new LinkedHashMap<>(definitions));
     }
 

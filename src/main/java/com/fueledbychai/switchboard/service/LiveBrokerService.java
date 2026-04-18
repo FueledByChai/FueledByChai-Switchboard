@@ -8,6 +8,7 @@ import com.fueledbychai.broker.Position;
 import com.fueledbychai.broker.aster.AsterBroker;
 import com.fueledbychai.broker.bybit.BybitBroker;
 import com.fueledbychai.broker.drift.DriftBroker;
+import com.fueledbychai.broker.hibachi.HibachiBroker;
 import com.fueledbychai.broker.hyperliquid.HyperliquidBroker;
 import com.fueledbychai.broker.lighter.LighterBroker;
 import com.fueledbychai.broker.okx.OkxBroker;
@@ -22,6 +23,7 @@ import com.fueledbychai.data.Exchange;
 import com.fueledbychai.data.Side;
 import com.fueledbychai.data.Ticker;
 import com.fueledbychai.drift.common.api.DriftConfiguration;
+import com.fueledbychai.hibachi.common.api.HibachiConfiguration;
 import com.fueledbychai.hyperliquid.ws.HyperliquidConfiguration;
 import com.fueledbychai.lighter.common.api.LighterConfiguration;
 import com.fueledbychai.okx.common.api.OkxConfiguration;
@@ -684,6 +686,15 @@ public class LiveBrokerService {
                 setProperty("drift.environment", mapEnvironment(exchangeName, profile.environment()));
                 DriftConfiguration.reset();
             }
+            case "HIBACHI" -> {
+                clearProperties("hibachi.api.key", "hibachi.api.secret", "hibachi.account.id",
+                        "hibachi.environment");
+                setProperty("hibachi.api.key", profile.fieldValues().get("apiKey"));
+                setProperty("hibachi.api.secret", profile.fieldValues().get("apiSecret"));
+                setProperty("hibachi.account.id", profile.fieldValues().get("accountId"));
+                setProperty("hibachi.environment", mapEnvironment(exchangeName, profile.environment()));
+                HibachiConfiguration.reset();
+            }
             default -> throw new IllegalArgumentException("Unsupported broker exchange: " + exchangeName);
         }
     }
@@ -697,6 +708,7 @@ public class LiveBrokerService {
             case "BYBIT" -> new BybitBroker();
             case "OKX" -> new OkxBroker();
             case "DRIFT" -> new DriftBroker();
+            case "HIBACHI" -> new HibachiBroker();
             default -> throw new IllegalArgumentException("Unsupported broker exchange: " + exchangeName);
         };
     }
@@ -732,6 +744,7 @@ public class LiveBrokerService {
             case "BYBIT" -> Exchange.BYBIT;
             case "OKX" -> Exchange.OKX;
             case "DRIFT" -> Exchange.DRIFT;
+            case "HIBACHI" -> Exchange.HIBACHI;
             default -> throw new IllegalArgumentException("Unsupported broker exchange: " + exchangeName);
         };
     }
