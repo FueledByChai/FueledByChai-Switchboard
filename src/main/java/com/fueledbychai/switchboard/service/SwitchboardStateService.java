@@ -188,13 +188,26 @@ public class SwitchboardStateService {
                 quote.containsType(QuoteType.ASK_SIZE) ? quote.getValue(QuoteType.ASK_SIZE) : null,
                 quote.containsType(QuoteType.LAST) ? quote.getValue(QuoteType.LAST) : null,
                 quote.containsType(QuoteType.LAST_SIZE) ? quote.getValue(QuoteType.LAST_SIZE) : null,
-                quote.containsType(QuoteType.VOLUME) ? quote.getValue(QuoteType.VOLUME) : null,
+                snapshotNotionalVolume(quote),
                 quote.containsType(QuoteType.OPEN) ? quote.getValue(QuoteType.OPEN) : null,
                 quote.containsType(QuoteType.CLOSE) ? quote.getValue(QuoteType.CLOSE) : null,
                 quote.containsType(QuoteType.MARK_PRICE) ? quote.getValue(QuoteType.MARK_PRICE) : null,
                 quoteTime,
                 requestedAt
         );
+    }
+
+    private static BigDecimal snapshotNotionalVolume(ILevel1Quote quote) {
+        BigDecimal notional = quote.containsType(QuoteType.VOLUME_NOTIONAL) ? quote.getValue(QuoteType.VOLUME_NOTIONAL) : null;
+        if (notional != null) {
+            return notional;
+        }
+        BigDecimal units = quote.containsType(QuoteType.VOLUME) ? quote.getValue(QuoteType.VOLUME) : null;
+        BigDecimal last = quote.containsType(QuoteType.LAST) ? quote.getValue(QuoteType.LAST) : null;
+        if (units != null && last != null) {
+            return units.multiply(last, MC);
+        }
+        return null;
     }
 
     public void removeMarket(String marketId) {
@@ -378,10 +391,6 @@ public class SwitchboardStateService {
         enginesByExchange.values().forEach(engine -> {
             try {
                 engine.stopEngine();
-            } catch (Exception ignored) {
-            }
-            try {
-                engine.shutdown();
             } catch (Exception ignored) {
             }
         });
@@ -777,7 +786,13 @@ public class SwitchboardStateService {
         if (symbol == null || symbol.isBlank()) {
             throw new IllegalArgumentException("Symbol is required.");
         }
-        return symbol.trim().toUpperCase(Locale.ROOT).replace(" ", "").replace('-', '/');
+        String normalized = symbol.trim().toUpperCase(Locale.ROOT).replace(" ", "");
+        if (normalized.endsWith("-SWAP")) {
+            normalized = normalized.substring(0, normalized.length() - "-SWAP".length());
+        } else if (normalized.endsWith("-PERP")) {
+            normalized = normalized.substring(0, normalized.length() - "-PERP".length());
+        }
+        return normalized.replace('-', '/');
     }
 
     private String normalizeRequestedSymbol(String symbol, SupportedAssetType assetType) {
@@ -1013,7 +1028,15 @@ public class SwitchboardStateService {
             ask = quoteValue(quote, QuoteType.ASK, ask);
             last = quoteValue(quote, QuoteType.LAST, last);
             dayReferencePrice = quoteValue(quote, QuoteType.CLOSE, quoteValue(quote, QuoteType.OPEN, dayReferencePrice));
-            volume = quoteValue(quote, QuoteType.VOLUME, quoteValue(quote, QuoteType.VOLUME_NOTIONAL, volume));
+            BigDecimal notional = quoteValue(quote, QuoteType.VOLUME_NOTIONAL, null);
+            if (notional != null) {
+                volume = notional;
+            } else {
+                BigDecimal units = quoteValue(quote, QuoteType.VOLUME, null);
+                if (units != null && last != null) {
+                    volume = units.multiply(last, MC);
+                }
+            }
             fundingRateApr = quoteValue(quote, QuoteType.FUNDING_RATE_APR, fundingRateApr);
             fundingRateBpsPerHour = quoteValue(quote, QuoteType.FUNDING_RATE_HOURLY_BPS, fundingRateBpsPerHour);
 

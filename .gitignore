@@ -2,6 +2,7 @@
 /.vscode
 /target
 /data/*
+/logs
 /.claude
 data/switchboard-db.mv.db
 data/switchboard-db.lock.db

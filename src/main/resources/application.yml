@@ -37,3 +37,7 @@ switchboard:
   secrets:
     master-key: ""
     master-key-path: ./data/master.key
+
+logging:
+  file:
+    name: logs/switchboard.log
